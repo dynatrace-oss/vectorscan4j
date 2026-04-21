@@ -1,0 +1,9 @@
+vectorscan4j third-party notice for bundled vectorscan binaries
+
+Files covered:
+- linux/x86_64/libvectorscan.so
+- linux/aarch64/libvectorscan.so
+
+For full third-party notice text, see:
+- /THIRD_PARTY_NOTICES.md (repository root or META-INF directory)
+

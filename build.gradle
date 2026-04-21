@@ -1,0 +1,107 @@
+plugins {
+    id "java-library"
+    id "maven-publish"
+    id "me.champeau.jmh" version "0.7.3"
+    id "com.diffplug.spotless" version "8.3.0"
+    id "jacoco"
+}
+
+group = "com.dynatrace.vectorscan4j"
+version = "0.1.0-SNAPSHOT"
+
+repositories {
+    mavenCentral()
+}
+
+jacoco {
+    toolVersion = "0.8.14"
+}
+
+jacocoTestReport {
+    dependsOn test
+
+    reports {
+        html.required.set(true)
+    }
+}
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+
+dependencies {
+    testImplementation platform("org.junit:junit-bom:5.10.0")
+    testImplementation "org.junit.jupiter:junit-jupiter"
+    testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.7.1"
+    jmhImplementation "org.openjdk.jmh:jmh-core:1.37"
+    jmhAnnotationProcessor "org.openjdk.jmh:jmh-generator-annprocess:1.37"
+}
+
+test {
+    useJUnitPlatform()
+}
+
+tasks.withType(Test).configureEach {
+    maxHeapSize = "4g"
+    jvmArgs = [
+            "-Xlog:gc=debug:stdout",
+            "-XX:+HeapDumpOnOutOfMemoryError",
+            "-XX:HeapDumpPath=${layout.buildDirectory}/heapdumps",
+            "--enable-native-access=ALL-UNNAMED"
+    ]
+}
+
+spotless {
+    java {
+        palantirJavaFormat("2.90.0")
+        targetExclude "src/jmh/java/com/dynatrace/utils/RegexGenerator.java"
+        licenseHeaderFile rootProject.file('spotless/HEADER.java')
+    }
+
+    format('javaWithAttribution') {
+        target "src/jmh/java/com/dynatrace/utils/RegexGenerator.java"
+        licenseHeaderFile rootProject.file('spotless/HEADER_WITH_ATTRIBUTION.java'), 'package '
+    }
+}
+
+def jmhIncludes = findProperty('jmhIncludes')
+def jmhProfile = findProperty('jmhProfile')
+jmh {
+    includeTests = false
+    if (jmhIncludes) {
+        includes = [jmhIncludes] as Iterable<? extends String>
+    }
+    if (jmhProfile) {
+        profilers = ["async:libPath=${System.getenv('ASYNC_PROFILER_PATH')};event=cpu;output=flamegraph;direction=forward;dir=build/results/jmh"] as Iterable<? extends String>
+    }
+}
+
+tasks.named("jar") {
+    from("THIRD_PARTY_NOTICES.md") {
+        into("META-INF")
+        rename { "THIRD_PARTY_NOTICES.txt" }
+    }
+    from("LICENSE") {
+        into("META-INF")
+    }
+}
+
+publishing {
+    publications {
+        mavenJava(MavenPublication) {
+            from components.java
+            pom {
+                name = "vectorscan4j"
+                description = "Java wrapper for Vectorscan pattern matching engine"
+                url = "https://github.com/dynatrace-oss/vectorscan4j"
+                licenses {
+                    license {
+                        name = "Apache License 2.0"
+                        url = "https://www.apache.org/licenses/LICENSE-2.0"
+                    }
+                }
+                scm {
+                    url = "https://github.com/dynatrace-oss/vectorscan4j"
+                }
+            }
+        }
+    }
+}
