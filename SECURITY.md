@@ -1,11 +1,5 @@
 # Security Policy
 
-## Supported Versions
-
-- `main` branch: supported
-- Latest release: supported
-- Older releases: best-effort only
-
 ## Reporting a Vulnerability
 
 Please do **not** open public GitHub issues for security vulnerabilities.
