@@ -51,7 +51,7 @@ The scratch space, and by extension the scanner object, are modified during the 
 A scanner's scan() method requires two arguments. 
    1. First, an object holding the payload for what you want to scan over. 
 The wrapper supports Strings, byte arrays, ByteBuffers (both on-heap and direct), and MemorySegments (both heap and native).
-   2. Second, an [OnMatchEventHandler](src/main/java/com/dynatrace/vectorscan/OnMatchEventHandler.java), which is a user-provided callback that gets executed on every match. 
+   2. Second, an [OnMatchEventHandler](src/main/java/com/dynatrace/vectorscan4j/OnMatchEventHandler.java), which is a user-provided callback that gets executed on every match. 
 Through that callback, the user can pass arbitrary logic to be executed on every match.  
 
 ## Code example

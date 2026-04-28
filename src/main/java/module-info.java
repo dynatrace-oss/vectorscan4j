@@ -20,17 +20,17 @@
  * <p>This module provides access to pattern compilation and scanning capabilities through:
  *
  * <ul>
- *   <li>{@link com.dynatrace.vectorscan.Database} - for compiling patterns into a searchable
+ *   <li>{@link com.dynatrace.vectorscan4j.Database} - for compiling patterns into a searchable
  *       database
- *   <li>{@link com.dynatrace.vectorscan.BlockScanner} - for stateless (block) pattern matching
- *   <li>{@link com.dynatrace.vectorscan.StreamScanner} - for stateful (streaming) pattern matching
- *   <li>{@link com.dynatrace.vectorscan.constants} - for execution modes, pattern flags, and error
+ *   <li>{@link com.dynatrace.vectorscan4j.BlockScanner} - for stateless (block) pattern matching
+ *   <li>{@link com.dynatrace.vectorscan4j.StreamScanner} - for stateful (streaming) pattern matching
+ *   <li>{@link com.dynatrace.vectorscan4j.constants} - for execution modes, pattern flags, and error
  *       codes
  * </ul>
  */
 module com.dynatrace.vectorscan4j {
-    exports com.dynatrace.vectorscan;
-    exports com.dynatrace.vectorscan.constants;
+    exports com.dynatrace.vectorscan4j;
+    exports com.dynatrace.vectorscan4j.constants;
 
     requires java.base;
 }
