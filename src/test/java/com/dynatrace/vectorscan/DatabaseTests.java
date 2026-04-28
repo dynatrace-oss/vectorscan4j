@@ -268,6 +268,22 @@ public class DatabaseTests {
     }
 
     @Test
+    void expressionsAreDefensivelyCopied() {
+        List<Expression> mutable = new ArrayList<>(List.of(new Expression("pat1"), new Expression("pat2")));
+
+        try (Database db = new Database(mutable, BLOCK_MODE)) {
+            // Mutate the original list after database creation
+            mutable.set(0, new Expression("REPLACED"));
+            mutable.add(new Expression("pat3"));
+
+            // The database should still reflect the original expressions
+            assertEquals(2, db.getNumExpressions());
+            assertEquals("pat1", db.getExpression(0).pattern());
+            assertEquals("pat2", db.getExpression(1).pattern());
+        }
+    }
+
+    @Test
     void operationsOnInvalidDb() {
         try (Database db = new Database(expressions, STREAM_MODE)) {
             // flip the first byte in the native database, to make the encoded DB invalid

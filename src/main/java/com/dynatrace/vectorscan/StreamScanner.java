@@ -28,7 +28,7 @@ import java.lang.foreign.MemorySegment;
 /**
  * Stateful scanner for vectorscan stream mode.
  *
- * <p>Unlike block scanning, stream scanning preserves matcher state across successive {@code
+ * <p>Stream scanning preserves matcher state across successive {@code
  * scan(...)} calls, which allows matches to span chunk boundaries. The stream state can be reset
  * with {@link #resetStream(OnMatchEventHandler handler)} or terminated with {@link #closeStream(OnMatchEventHandler)}. After
  * closing, a new state can be created via {@link #openStream()}.
@@ -113,7 +113,10 @@ public class StreamScanner extends Scanner {
      * Resets the current stream back to its initial state.
      *
      * <p>After reset, subsequent scans do not retain any partial match context from earlier chunks.
+     * Vectorscan may emit end-of-stream matches during the reset; these are delivered through
+     * {@code handler}.
      *
+     * @param handler callback used for any matches emitted during the reset
      * @throws VectorscanException if vectorscan reports an error during reset
      */
     public void resetStream(OnMatchEventHandler handler) {
@@ -147,6 +150,12 @@ public class StreamScanner extends Scanner {
         streamOpen = false;
     }
 
+    /**
+     * Closes this scanner, releasing all native resources.
+     *
+     * <p>If the stream is still open, it is closed first (any end-of-stream matches are discarded).
+     * After this call, the scanner must not be used again.
+     */
     @Override
     public void close() {
         if (streamOpen) {
@@ -155,6 +164,11 @@ public class StreamScanner extends Scanner {
         super.close();
     }
 
+    /**
+     * Returns whether the native stream is currently open.
+     *
+     * @return {@code true} if a stream is open and ready for scanning, {@code false} otherwise
+     */
     public boolean isStreamOpen() {
         return streamOpen;
     }

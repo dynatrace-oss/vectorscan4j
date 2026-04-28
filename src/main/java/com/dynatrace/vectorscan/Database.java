@@ -30,6 +30,25 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * A compiled pattern database for use with vectorscan scanners.
+ *
+ * <p>A {@code Database} is created by compiling one or more {@link Expression} objects together with
+ * an {@link ExecutionMode}. The resulting automaton is stored in off-heap (native) memory managed by
+ * vectorscan. The database is immutable after compilation and can be safely shared across multiple
+ * scanner instances and threads.
+ *
+ * <p>Databases can be serialized to and deserialized from byte arrays or streams via
+ * {@link #serialize()} and {@link #deserialize(byte[])}, which is useful for caching compiled
+ * databases on disk or transferring them over a network.
+ *
+ * <p>This class implements {@link AutoCloseable}. Closing a database frees its native memory
+ * immediately. If {@code close()} is not called, native memory is freed when the object is garbage
+ * collected (via a {@link java.lang.ref.Cleaner}), but this may happen significantly later.
+ * Prefer try-with-resources for deterministic cleanup.
+ *
+ * <p>Once closed, the database must not be used for scanning or serialization.
+ */
 public class Database implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
 
@@ -62,9 +81,18 @@ public class Database implements AutoCloseable {
         }
     }
 
+    /**
+     * Compiles a new database from the given expressions and execution mode.
+     *
+     * @param expressions list of patterns to compile; each is assigned an id equal to its list index
+     * @param executionMode whether the database targets {@link ExecutionMode#BLOCK_MODE block} or
+     *     {@link ExecutionMode#STREAM_MODE stream} scanning
+     * @throws RuntimeException if any expression fails to compile (the message includes the
+     *     offending pattern id and vectorscan's error description)
+     */
     public Database(List<Expression> expressions, ExecutionMode executionMode) {
         this.arena = Arena.ofConfined();
-        this.expressions = expressions;
+        this.expressions = List.copyOf(expressions);
         this.mode = executionMode;
         this.modeNative = executionMode.equals(ExecutionMode.BLOCK_MODE) ? 1 : 2 + (1 << 24);
         // allocate all required function arguments for database compilation as MemorySegments
@@ -103,7 +131,7 @@ public class Database implements AutoCloseable {
     private Database(Arena arena, MemorySegment dbNative, List<Expression> expressions, ExecutionMode mode) {
         this.arena = arena;
         this.dbNative = dbNative;
-        this.expressions = expressions;
+        this.expressions = List.copyOf(expressions);
         this.mode = mode;
         this.modeNative = mode.equals(ExecutionMode.BLOCK_MODE) ? 1 : 2 + (1 << 24);
 
@@ -130,6 +158,17 @@ public class Database implements AutoCloseable {
         }
     }
 
+    /**
+     * Serializes this database to the given output stream.
+     *
+     * <p>The output contains the expression metadata followed by the native database bytes. It can
+     * be restored with {@link #deserialize(InputStream)}.
+     *
+     * @param os destination stream
+     * @throws IllegalStateException if this database has already been closed
+     * @throws UncheckedIOException if an I/O error occurs while writing
+     * @throws VectorscanException if native serialization fails
+     */
     public void serialize(OutputStream os) {
         if (isClosed()) {
             throw new IllegalStateException("Trying to serialize an already closed database.");
@@ -148,12 +187,30 @@ public class Database implements AutoCloseable {
         }
     }
 
+    /**
+     * Serializes this database into a byte array.
+     *
+     * @return the serialized database bytes
+     * @throws IllegalStateException if this database has already been closed
+     * @throws VectorscanException if native serialization fails
+     */
     public byte[] serialize() {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         serialize(bos);
         return bos.toByteArray();
     }
 
+    /**
+     * Deserializes a database from the given input stream.
+     *
+     * <p>The stream must contain data previously written by {@link #serialize(OutputStream)}.
+     * The caller is responsible for closing the returned database when it is no longer needed.
+     *
+     * @param is source stream
+     * @return a new {@code Database} instance
+     * @throws UncheckedIOException if an I/O error occurs while reading
+     * @throws VectorscanException if native deserialization fails
+     */
     public static Database deserialize(InputStream is) {
         try (Arena temp = Arena.ofConfined()) {
             DataInputStream dis = new DataInputStream(is);
@@ -190,11 +247,24 @@ public class Database implements AutoCloseable {
         }
     }
 
+    /**
+     * Deserializes a database from a byte array.
+     *
+     * @param dbBytes bytes previously returned by {@link #serialize()}
+     * @return a new {@code Database} instance
+     * @throws VectorscanException if native deserialization fails
+     */
     public static Database deserialize(byte[] dbBytes) {
         ByteArrayInputStream bis = new ByteArrayInputStream(dbBytes);
         return deserialize(bis);
     }
 
+    /**
+     * Returns the size in bytes of the compiled native database.
+     *
+     * @return database size in bytes
+     * @throws VectorscanException if the size cannot be determined
+     */
     public long getSize() {
         try (Arena temp = Arena.ofConfined()) {
             MemorySegment databaseSize = temp.allocate(C_LONG, 1);
@@ -207,6 +277,12 @@ public class Database implements AutoCloseable {
         }
     }
 
+    /**
+     * Returns a human-readable string describing the database (version, platform, and execution mode).
+     *
+     * @return info string from vectorscan
+     * @throws VectorscanException if the info cannot be retrieved
+     */
     public String getInfo() {
         try (Arena temp = Arena.ofConfined()) {
             MemorySegment infoPtr = temp.allocate(C_POINTER, 1);
@@ -229,22 +305,50 @@ public class Database implements AutoCloseable {
         }
     }
 
+    /**
+     * Returns the execution mode this database was compiled for.
+     *
+     * @return {@link ExecutionMode#BLOCK_MODE} or {@link ExecutionMode#STREAM_MODE}
+     */
     public ExecutionMode getMode() {
         return mode;
     }
 
+    /**
+     * Returns the expression at the given index.
+     *
+     * @param index zero-based expression id
+     * @return the expression
+     * @throws IndexOutOfBoundsException if the index is out of range
+     */
     public Expression getExpression(int index) {
         return expressions.get(index);
     }
 
+    /**
+     * Returns the number of expressions compiled into this database.
+     *
+     * @return expression count
+     */
     public int getNumExpressions() {
         return expressions.size();
     }
 
+    /**
+     * Returns whether this database has been closed and its native memory freed.
+     *
+     * @return {@code true} if closed, {@code false} if still usable
+     */
     public boolean isClosed() {
         return !arena.scope().isAlive();
     }
 
+    /**
+     * Closes this database, freeing its native memory.
+     *
+     * <p>This method is idempotent; calling it more than once has no effect. After closing, the
+     * database must not be used for scanning or serialization.
+     */
     @Override
     public void close() {
         cleanable.clean();
