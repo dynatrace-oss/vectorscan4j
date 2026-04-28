@@ -1,5 +1,6 @@
 src/jmh/resources/
 src/test/resources/
+.env
 
 .gradle/
 build/
