@@ -71,7 +71,6 @@ public class RegexFeaturesTests {
         assertEquals(1, numMatches("", List.of("$")));
         assertEquals(1, numMatches("ab", List.of("b$")));
         assertEquals(0, numMatches("ab", List.of("a$")));
-        // . matches any character, except newline
 
         // | matches a specific character or group of characters on either side
         assert (matches('a', "a|b"));
@@ -133,6 +132,7 @@ public class RegexFeaturesTests {
 
         // \S matches a non-whitespace character
         assertEquals(5, numMatches("aA1_!", List.of("\\S")));
+        assertEquals(0, numMatches(" \t\n\r\f", List.of("\\S")));
 
         // \w matches a word character (letters, digits, and underscore)
         assert (matches('a', "\\w"));

@@ -23,7 +23,25 @@ import static com.dynatrace.vectorscan.internal.VectorscanNative.hs_scan;
 import com.dynatrace.vectorscan.constants.ErrorCode;
 import java.lang.foreign.MemorySegment;
 
+/**
+ * A {@link Scanner} that operates in block mode: each call to {@code scan(...)} processes a single,
+ * self-contained input buffer in isolation. Each scan starts from the initial DFA/NFA state and ends when the entire input
+ *  * has been consumed (or the {@link OnMatchEventHandler} requests early termination by returning
+ *  * {@code false}).
+ *
+ * <p>Each scanner owns its own native scratch space and is therefore <strong>not</strong> safe to
+ * use concurrently from multiple threads. To scan in parallel, create one {@code BlockScanner} per
+ * thread, all sharing the same {@link Database}.
+ *
+ */
 public class BlockScanner extends Scanner {
+    /**
+     * Creates a new block-mode scanner backed by the given compiled {@link Database}.
+     *
+     * @param db a database that was compiled with {@link
+     *     com.dynatrace.vectorscan.constants.ExecutionMode#BLOCK_MODE BLOCK_MODE}
+     * @throws IllegalArgumentException if {@code db} was not compiled in block mode
+     */
     public BlockScanner(Database db) {
         if (db.getMode() != BLOCK_MODE) {
             throw new IllegalArgumentException("Database must have been compiled in block mode");
@@ -39,9 +57,18 @@ public class BlockScanner extends Scanner {
      * foreign memory explicitly. The supplied {@code data} segment must remain alive and accessible
      * for the entire duration of this synchronous call.
      *
-     * @param data memory region containing the bytes to scan
+     * <p>The full range {@code [0, data.byteSize())} of the segment is scanned. To scan only a
+     * sub-range, use {@link MemorySegment#asSlice(long, long)} before calling this method.
+     *
+     * @param data memory region containing the bytes to scan; must have a byte size that fits into
+     *     a Java {@code int}
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *     {@code false} to stop early
+     * @throws IllegalArgumentException if {@code data.byteSize()} exceeds {@link Integer#MAX_VALUE}
+     * @throws IllegalStateException if the underlying {@link Database} or this scanner has already
+     *     been closed
+     * @throws VectorscanException if the native scan call returns an error other than {@link
+     *     com.dynatrace.vectorscan.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
      */
     public void scan(MemorySegment data, OnMatchEventHandler handler) {
         if (data.byteSize() > Integer.MAX_VALUE) {
