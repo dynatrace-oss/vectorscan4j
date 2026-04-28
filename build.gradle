@@ -87,6 +87,11 @@ tasks.named("jar") {
     from("LICENSE") {
         into("META-INF")
     }
+    exclude("native/vectorscan.h")
+}
+
+tasks.named("sourcesJar") {
+    exclude("native/vectorscan.h")
 }
 
 publishing {
