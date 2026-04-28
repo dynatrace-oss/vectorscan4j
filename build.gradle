@@ -1,13 +1,14 @@
 plugins {
     id "java-library"
     id "maven-publish"
+    id "signing"
     id "me.champeau.jmh" version "0.7.3"
     id "com.diffplug.spotless" version "8.3.0"
     id "jacoco"
 }
 
 group = "com.dynatrace.vectorscan4j"
-version = "0.1.0-SNAPSHOT"
+version = "0.1.0"
 
 repositories {
     mavenCentral()
@@ -25,7 +26,11 @@ jacocoTestReport {
     }
 }
 
-java.toolchain.languageVersion = JavaLanguageVersion.of(25)
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    withSourcesJar()
+    withJavadocJar()
+}
 
 dependencies {
     testImplementation platform("org.junit:junit-bom:5.10.0")
@@ -90,18 +95,45 @@ publishing {
             from components.java
             pom {
                 name = "vectorscan4j"
-                description = "Java wrapper for Vectorscan pattern matching engine"
+                description = "A Java wrapper for the Vectorscan pattern matching engine"
                 url = "https://github.com/dynatrace-oss/vectorscan4j"
                 licenses {
                     license {
                         name = "Apache License 2.0"
-                        url = "https://www.apache.org/licenses/LICENSE-2.0"
+                        url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
                     }
                 }
+                developers {
+                    developer {
+                        id = "Dynatrace"
+                        name = "Dynatrace LLC"
+                        email = "opensource@dynatrace.com"
+                    }
+
+                }
                 scm {
+                    connection = "scm:git:git://github.com/dynatrace-oss/vectorscan4j.git"
+                    developerConnection = "scm:git:ssh://github.com/dynatrace-oss/vectorscan4j.git"
                     url = "https://github.com/dynatrace-oss/vectorscan4j"
                 }
             }
         }
     }
+    repositories {
+        maven {
+            url = "$projectDir/build/mavencentral/repo"
+        }
+    }
+}
+
+signing {
+    useInMemoryPgpKeys(System.getenv("GPG_PRIVATE_KEY"), System.getenv("GPG_PASSPHRASE"))
+    sign publishing.publications.mavenJava
+}
+
+tasks.register("createRepoForUploadToMavenCentral", Zip) {
+    dependsOn build, publish
+    from "$projectDir/build/mavencentral/repo"
+    destinationDirectory = file("$projectDir/build/mavencentral")
+    archiveFileName = "repo.zip"
 }
