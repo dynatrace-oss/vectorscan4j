@@ -21,7 +21,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
-public final class NativeLoader {
+final class NativeLoader {
     private NativeLoader() {}
 
     public static synchronized void load(String libBaseName) {

@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.*;
 
 import com.dynatrace.vectorscan4j.constants.ExecutionMode;
 import com.dynatrace.vectorscan4j.constants.Flags;
-import com.dynatrace.vectorscan4j.internal.NativeLoader;
 import java.io.*;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -253,11 +252,6 @@ public class DatabaseTests {
         Database db = new Database(expressions, BLOCK_MODE);
         db.close();
         assertDoesNotThrow(db::close);
-    }
-
-    @Test
-    void loadNonexistentNativeLibrary() {
-        assertThrows(RuntimeException.class, () -> NativeLoader.load("nonexistent"));
     }
 
     @Test
