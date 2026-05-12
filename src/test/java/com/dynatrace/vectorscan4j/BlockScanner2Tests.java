@@ -34,7 +34,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import org.junit.jupiter.api.Test;
 
-public class BlockScannerTests {
+public class BlockScanner2Tests {
     static final List<Expression> expressions = Arrays.asList(
             new Expression("pattern1", EnumSet.of(SOM_LEFTMOST, CASELESS)),
             new Expression("pattern2", EnumSet.of(SOM_LEFTMOST, CASELESS)),
@@ -46,14 +46,14 @@ public class BlockScannerTests {
     @Test
     void databaseWrongMode() {
         Database db = new Database(expressions, ExecutionMode.STREAM_MODE);
-        assertThrows(IllegalArgumentException.class, () -> new BlockScanner(db));
+        assertThrows(IllegalArgumentException.class, () -> new BlockScanner2(db));
         db.close();
     }
 
     @Test
     void defaultScan() {
         try (Database db = new Database(expressions, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             String input = "I am searching for pattern1, has anyone seen pattern1?";
             List<Integer> matchedIds = new ArrayList<>();
 
@@ -77,11 +77,11 @@ public class BlockScannerTests {
         };
         List<Expression> exprs = List.of(new Expression("pat1"), new Expression("pat2"));
         try (Database db = new Database(exprs, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             nMatches = 0;
             scanner.scan("Here is pat1 and here is pat2!", incrementAndStop);
             assertEquals(1, nMatches);
-            // With a BlockScanner, this stopping early does not influence the next scan, so the second
+            // With a BlockScanner2, this stopping early does not influence the next scan, so the second
             // scan
             // would again match pat1 and then stop.
             scanner.scan("Here is pat1 and here is pat2!", incrementAndStop);
@@ -92,7 +92,7 @@ public class BlockScannerTests {
     @Test
     void invalidLength() {
         try (Database db = new Database(expressions, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             byte[] data = "Hello".getBytes();
             assertDoesNotThrow(() -> scanner.scan(data, 0, 5, doNothing));
             assertDoesNotThrow(() -> scanner.scan(data, 1, 4, doNothing));
@@ -105,7 +105,7 @@ public class BlockScannerTests {
     @Test
     void noMatch() {
         try (Database db = new Database(expressions, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             List<Integer> matchedIds = new ArrayList<>();
             scanner.scan("this input contains nothing of interest", (id, _, _, _) -> {
                 matchedIds.add(id);
@@ -118,7 +118,7 @@ public class BlockScannerTests {
     @Test
     void emptyInput() {
         try (Database db = new Database(expressions, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             List<Integer> matchedIds = new ArrayList<>();
             OnMatchEventHandler collect = (id, _, _, _) -> {
                 matchedIds.add(id);
@@ -137,7 +137,7 @@ public class BlockScannerTests {
     void tooBigInput() {
         List<Expression> exprs = List.of(new Expression("pattern1"));
         try (Database db = new Database(exprs, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db);
+                BlockScanner2 scanner = new BlockScanner2(db);
                 Arena arena = Arena.ofConfined()) {
             MemorySegment tiny = arena.allocate(1);
             MemorySegment oversized = tiny.reinterpret((long) Integer.MAX_VALUE + 1L);
@@ -150,7 +150,7 @@ public class BlockScannerTests {
     void directByteBuffer() {
         List<Expression> exprs = List.of(new Expression("pattern1"));
         try (Database db = new Database(exprs, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             byte[] bytes = "found pattern1 here".getBytes(StandardCharsets.UTF_8);
             ByteBuffer direct = ByteBuffer.allocateDirect(bytes.length);
             direct.put(bytes);
@@ -169,7 +169,7 @@ public class BlockScannerTests {
     void byteBufferRangeRespected() {
         List<Expression> exprs = List.of(new Expression("pattern1"));
         try (Database db = new Database(exprs, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             ByteBuffer buf = ByteBuffer.wrap("pattern1__pattern1__pattern1".getBytes(StandardCharsets.UTF_8));
             List<Integer> matchedIds = new ArrayList<>();
             OnMatchEventHandler collect = (id, _, _, _) -> {
@@ -194,7 +194,7 @@ public class BlockScannerTests {
     void scanByteArray() {
         List<Expression> exprs = List.of(new Expression("pattern1"));
         try (Database db = new Database(exprs, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             byte[] data = "found pattern1 twice: pattern1".getBytes(StandardCharsets.UTF_8);
 
             List<Integer> matchedIds = new ArrayList<>();
@@ -210,7 +210,7 @@ public class BlockScannerTests {
     void bufferResizing() {
         List<Expression> exprs = List.of(new Expression("pattern1"));
         try (Database db = new Database(exprs, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             // large input triggers internal buffer reallocation
             byte[] bigData = ("pattern1" + "x".repeat(1024 * 1024 * 10)).getBytes(StandardCharsets.UTF_8);
             List<Integer> bigMatches = new ArrayList<>();
@@ -234,7 +234,7 @@ public class BlockScannerTests {
     void multiplePatternsSameInput() {
         List<Expression> exprs = List.of(new Expression("foo"), new Expression("bar"), new Expression("baz"));
         try (Database db = new Database(exprs, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             List<Integer> matchedIds = new ArrayList<>();
             scanner.scan("foo bar baz", (id, _, _, _) -> {
                 matchedIds.add(id);
@@ -255,7 +255,7 @@ public class BlockScannerTests {
         int[] countsById = new int[exprs.size()];
 
         try (Database database = new Database(exprs, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(database)) {
+                BlockScanner2 scanner = new BlockScanner2(database)) {
             scanner.scan(input, (id, _, _, _) -> {
                 countsById[id]++;
                 return true;
@@ -282,7 +282,7 @@ public class BlockScannerTests {
         int sectionSize = fileBytes.length / nCores;
         int expectedMatches = 0;
         try (Database db = new Database(exprs, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             for (int i = 0; i < nCores; i++) {
                 final int start = i * sectionSize;
                 final int len = (i == nCores - 1) ? fileBytes.length - start : sectionSize;
@@ -295,7 +295,7 @@ public class BlockScannerTests {
             }
         }
 
-        // Parallel: one BlockScanner per thread, sharing a single compiled Database
+        // Parallel: one BlockScanner2 per thread, sharing a single compiled Database
         Database db = new Database(exprs, BLOCK_MODE);
         List<Integer> parallelMatches = Collections.synchronizedList(new ArrayList<>());
         ExecutorService pool = Executors.newFixedThreadPool(nCores);
@@ -305,7 +305,7 @@ public class BlockScannerTests {
             final int start = i * sectionSize;
             final int len = (i == nCores - 1) ? fileBytes.length - start : sectionSize;
             futures.add(pool.submit(() -> {
-                try (BlockScanner scanner = new BlockScanner(db)) {
+                try (BlockScanner2 scanner = new BlockScanner2(db)) {
                     scanner.scan(fileBytes, start, len, (id, _, _, _) -> {
                         parallelMatches.add(id);
                         return true;
@@ -322,7 +322,7 @@ public class BlockScannerTests {
     @Test
     void scanAfterClosingDatabase() {
         Database db = new Database(expressions, BLOCK_MODE);
-        BlockScanner scanner = new BlockScanner(db);
+        BlockScanner2 scanner = new BlockScanner2(db);
         db.close();
         assertThrows(IllegalStateException.class, () -> scanner.scan("Test", doNothing));
     }
@@ -330,7 +330,7 @@ public class BlockScannerTests {
     @Test
     void notClosingStillFreesMemory() {
         Database db = new Database(expressions, BLOCK_MODE);
-        BlockScanner scanner = new BlockScanner(db);
+        BlockScanner2 scanner = new BlockScanner2(db);
         scanner = null;
         db = null;
 
@@ -352,7 +352,7 @@ public class BlockScannerTests {
     @Test
     void scanAfterClosingScanner() {
         try (Database db = new Database(expressions, BLOCK_MODE)) {
-            BlockScanner scanner = new BlockScanner(db);
+            BlockScanner2 scanner = new BlockScanner2(db);
             scanner.close();
             // The underlying Arena is closed; any subsequent scan must throw
             assertThrows(IllegalStateException.class, () -> scanner.scan("pattern1", doNothing));
@@ -360,9 +360,9 @@ public class BlockScannerTests {
     }
 
     @Test
-    void closeBlockScannerIsIdempotent() {
+    void closeBlockScanner2IsIdempotent() {
         try (Database db = new Database(expressions, BLOCK_MODE)) {
-            BlockScanner scanner = new BlockScanner(db);
+            BlockScanner2 scanner = new BlockScanner2(db);
             assertDoesNotThrow(scanner::close);
             assertDoesNotThrow(scanner::close);
         }
@@ -371,7 +371,7 @@ public class BlockScannerTests {
     @Test
     void invalidScan() {
         try (Database db = new Database(expressions, BLOCK_MODE)) {
-            BlockScanner scanner = new BlockScanner(db);
+            BlockScanner2 scanner = new BlockScanner2(db);
             scanner.close();
             // The underlying Arena is closed; any subsequent scan must throw
             assertThrows(Exception.class, () -> scanner.scan("pattern1", doNothing));
@@ -381,7 +381,7 @@ public class BlockScannerTests {
     @Test
     void scanClosedMemorySegment() {
         try (Database db = new Database(expressions, BLOCK_MODE)) {
-            BlockScanner scanner = new BlockScanner(db);
+            BlockScanner2 scanner = new BlockScanner2(db);
             Arena arena = Arena.ofConfined();
             MemorySegment data = arena.allocateFrom("Input String");
             arena.close();
@@ -395,7 +395,7 @@ public class BlockScannerTests {
             // flip the first byte in the native database, to make the encoded DB invalid
             byte b0 = db.dbNative.get(JAVA_BYTE, 0);
             db.dbNative.set(JAVA_BYTE, 0, (byte) (b0 ^ 0xFF));
-            assertThrows(VectorscanException.class, () -> new BlockScanner(db));
+            assertThrows(VectorscanException.class, () -> new BlockScanner2(db));
 
             // flip the first byte back, to make the encoded DB valid again (so it can close properly)
             db.dbNative.set(JAVA_BYTE, 0, b0);
@@ -405,7 +405,7 @@ public class BlockScannerTests {
     @Test
     void scannerOperationsWithInvalidDb() {
         try (Database db = new Database(expressions, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db)) {
+                BlockScanner2 scanner = new BlockScanner2(db)) {
             // flip the first byte in the native database, to make the encoded DB invalid
             byte b0 = db.dbNative.get(JAVA_BYTE, 0);
             db.dbNative.set(JAVA_BYTE, 0, (byte) (b0 ^ 0xFF));

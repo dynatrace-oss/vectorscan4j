@@ -60,6 +60,7 @@ abstract class Scanner implements AutoCloseable {
 
         @Override
         public void run() {
+            IO.println("Cleanup!");
             try {
                 hs_free_scratch(scratch);
             } catch (Throwable ignored) {

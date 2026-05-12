@@ -126,6 +126,26 @@ public class DatabaseTests {
     }
 
     @Test
+    void notClosingStillFreesMemory() {
+        Database db = new Database(expressions, BLOCK_MODE);
+        db = null;
+
+        // Ask the JVM to collect and run pending cleanup actions.
+        for (int i = 0; i < 10; i++) {
+            System.gc();
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException e) {
+                IO.println("Thread interrupted.");
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+
+        System.out.println("Main method finished");
+    }
+
+    @Test
     void serializeDeserializeStreamDatabaseFromByteArr() {
         String input = "We have pat1 and pat2 int this input string.";
         List<Expression> expressions = List.of(

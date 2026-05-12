@@ -70,6 +70,7 @@ public class Database implements AutoCloseable {
 
         @Override
         public void run() {
+            IO.println("Running Database cleanup!");
             try {
                 int _ = hs_free_database(dbNative);
             } catch (Throwable ignored) {
@@ -351,6 +352,6 @@ public class Database implements AutoCloseable {
      */
     @Override
     public void close() {
-        cleanable.clean();
+        // cleanable.clean();
     }
 }
