@@ -34,7 +34,7 @@ abstract class Scanner implements AutoCloseable {
     private long bufferCapacity = 1024L; // 1KB default buffer size
     private int bufferLength;
     private Arena dataArena = Arena.ofConfined();
-    private MemorySegment buffer = dataArena.allocate(bufferCapacity);
+    private MemorySegment dataSegment = dataArena.allocate(bufferCapacity);
     protected final Arena arena = Arena.ofConfined();
     protected final Database database;
     private OnMatchEventHandler handler;
@@ -45,8 +45,8 @@ abstract class Scanner implements AutoCloseable {
 
     private static final class CleanupState implements Runnable {
         private final MemorySegment scratch;
-        private final Arena arena;
-        private Arena dataArena;
+        private final Arena arena; // manages lifetime of internal scratch space.
+        private Arena dataArena; // manages lifetime of internal data segment.
 
         private CleanupState(MemorySegment scratch, Arena dataArena, Arena arena) {
             this.scratch = scratch;
@@ -97,8 +97,9 @@ abstract class Scanner implements AutoCloseable {
             throw new VectorscanException(errorCode);
         }
         scratch = scratchPtr.getAtIndex(C_POINTER, 0);
-        cleanupState = new CleanupState(scratch, dataArena, arena);
-        cleanable = CLEANER.register(this, cleanupState);
+        this.cleanupState = new CleanupState(scratch, dataArena, arena);
+        this.cleanable = CLEANER.register(this, cleanupState);
+    }
 
     private void ensureBufferCapacity(long needed) {
         if (needed > bufferCapacity) {
@@ -109,10 +110,8 @@ abstract class Scanner implements AutoCloseable {
     protected void setBuffer(ByteBuffer input) {
         int length = input.remaining();
         // if the internal direct ByteBuffer is too small to fit the whole input, allocate a bigger ByteBuffer
-        if (length > bufferCapacity) {
-            resizeBuffer(length);
-        }
-        buffer.asByteBuffer().put(input);
+        ensureBufferCapacity(length);
+        dataSegment.asByteBuffer().put(input);
         bufferLength = length;
     }
 
@@ -120,7 +119,7 @@ abstract class Scanner implements AutoCloseable {
         dataArena.close();
         dataArena = Arena.ofConfined();
         cleanupState.setDataArena(dataArena);
-        buffer = dataArena.allocate(newSize);
+        dataSegment = dataArena.allocate(newSize);
         bufferCapacity = newSize;
     }
 
@@ -185,7 +184,7 @@ abstract class Scanner implements AutoCloseable {
             scan(data, handler);
         } else {
             setBuffer(buf);
-            scan(buffer.asSlice(0, bufferLength), handler);
+            scan(dataSegment.asSlice(0, bufferLength), handler);
         }
     }
 
