@@ -99,6 +99,11 @@ abstract class Scanner implements AutoCloseable {
         scratch = scratchPtr.getAtIndex(C_POINTER, 0);
         cleanupState = new CleanupState(scratch, dataArena, arena);
         cleanable = CLEANER.register(this, cleanupState);
+
+    private void ensureBufferCapacity(long needed) {
+        if (needed > bufferCapacity) {
+            resizeBuffer(needed);
+        }
     }
 
     protected void setBuffer(ByteBuffer input) {
