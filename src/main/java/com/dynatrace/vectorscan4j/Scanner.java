@@ -30,20 +30,29 @@ import java.nio.charset.StandardCharsets;
 
 abstract class Scanner implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
-
     private long bufferCapacity = 1024L; // 1KB default buffer size
     private int bufferLength;
-    private Arena dataArena = Arena.ofConfined();
+    private Arena dataArena = Arena.ofShared();
     private MemorySegment dataSegment = dataArena.allocate(bufferCapacity);
-    protected final Arena arena = Arena.ofConfined();
+    protected final Arena arena = Arena.ofShared();
     protected final Database database;
-    private OnMatchEventHandler handler;
     protected final MemorySegment scratch;
-    protected final MemorySegment funcPtr = VectorscanMatchEventHandler.allocate(new CallHandlerOnMatch(), arena);
-    private final CleanupState cleanupState;
+    private final CallHandlerOnMatch callHandler = new CallHandlerOnMatch();
+    protected MemorySegment funcPtr = VectorscanMatchEventHandler.allocate(callHandler, arena);
+    ;
+    protected final CleanupState cleanupState;
     private final Cleaner.Cleanable cleanable;
 
-    private static final class CleanupState implements Runnable {
+    static class CallHandlerOnMatch implements VectorscanMatchEventHandler.Function {
+        OnMatchEventHandler handler;
+
+        @Override
+        public int apply(int id, long from, long to, int flags, MemorySegment context) {
+            return handler.onMatch(id, from, to, flags) ? 0 : 1;
+        }
+    }
+
+    protected static final class CleanupState implements Runnable {
         private final MemorySegment scratch;
         private final Arena arena; // manages lifetime of internal scratch space.
         private Arena dataArena; // manages lifetime of internal data segment.
@@ -76,17 +85,12 @@ abstract class Scanner implements AutoCloseable {
     }
 
     protected void setHandler(OnMatchEventHandler handler) {
-        this.handler = handler;
-    }
-
-    protected class CallHandlerOnMatch implements VectorscanMatchEventHandler.Function {
-        @Override
-        public int apply(int id, long from, long to, int flags, MemorySegment context) {
-            return handler.onMatch(id, from, to, flags) ? 0 : 1;
-        }
+        this.callHandler.handler = handler;
     }
 
     protected Scanner(Database database) {
+        CallHandlerOnMatch callHandler = new CallHandlerOnMatch();
+
         this.database = database;
 
         // allocate scratch space
@@ -117,7 +121,7 @@ abstract class Scanner implements AutoCloseable {
 
     private void resizeBuffer(long newSize) {
         dataArena.close();
-        dataArena = Arena.ofConfined();
+        dataArena = Arena.ofShared();
         cleanupState.setDataArena(dataArena);
         dataSegment = dataArena.allocate(newSize);
         bufferCapacity = newSize;

@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.dynatrace.vectorscan4j.constants.ExecutionMode;
 import com.dynatrace.vectorscan4j.constants.Flags;
 import java.io.*;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -296,5 +297,17 @@ public class DatabaseTests {
             assertDoesNotThrow(db::getInfo);
             assertDoesNotThrow(() -> db.serialize());
         }
+    }
+
+    @Test
+    void notClosingStillFreesMemory() throws InterruptedException {
+        Database db = new Database(expressions, BLOCK_MODE);
+        WeakReference<Database> dbRef = new WeakReference<>(db);
+        assertNotNull(dbRef.get(), "Database was freed pre-emptively.");
+        db = null;
+
+        System.gc();
+        Thread.sleep(100);
+        assertNull(dbRef.get(), "Database did not get freed.");
     }
 }

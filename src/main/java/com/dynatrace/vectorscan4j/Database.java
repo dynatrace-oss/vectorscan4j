@@ -51,7 +51,6 @@ import java.util.List;
  */
 public class Database implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
-
     private final Arena arena;
     protected final MemorySegment dbNative;
     protected final int modeNative;
@@ -91,7 +90,7 @@ public class Database implements AutoCloseable {
      *     offending pattern id and vectorscan's error description)
      */
     public Database(List<Expression> expressions, ExecutionMode executionMode) {
-        this.arena = Arena.ofConfined();
+        this.arena = Arena.ofShared();
         this.expressions = List.copyOf(expressions);
         this.mode = executionMode;
         this.modeNative = executionMode.equals(ExecutionMode.BLOCK_MODE) ? 1 : 2 + (1 << 24);
@@ -226,7 +225,7 @@ public class Database implements AutoCloseable {
             MemorySegment dbBytesPtr = temp.allocate(dbBytes.length);
             dbBytesPtr.asByteBuffer().put(dbBytes);
 
-            Arena arena = Arena.ofConfined();
+            Arena arena = Arena.ofShared();
             try {
                 MemorySegment dbPtr = arena.allocate(C_POINTER);
                 int ans = hs_deserialize_database(dbBytesPtr, dbBytes.length, dbPtr);

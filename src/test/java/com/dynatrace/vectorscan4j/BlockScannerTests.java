@@ -26,6 +26,7 @@ import com.dynatrace.vectorscan4j.constants.Flags;
 import com.dynatrace.vectorscan4j.utils.LoadGenerator;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
+import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
@@ -392,5 +393,54 @@ public class BlockScannerTests {
             // flip the first byte back, to make the encoded DB valid again (so it can close properly)
             db.dbNative.set(JAVA_BYTE, 0, b0);
         }
+    }
+
+    @Test
+    void notClosingStillFreesMemory() throws InterruptedException {
+        Database db = new Database(expressions, BLOCK_MODE);
+        BlockScanner scanner = new BlockScanner(db);
+        WeakReference<Database> dbRef = new WeakReference<>(db);
+        WeakReference<BlockScanner> scannerRef = new WeakReference<>(scanner);
+        assertNotNull(dbRef.get(), "Database was freed pre-emptively.");
+        assertNotNull(scannerRef.get(), "BlockScanner was freed pre-emptively.");
+
+        // Making the BlockScanner instance unreachable will garbage collect that instance, but not the Database
+        scanner = null;
+        System.gc();
+        Thread.sleep(100);
+        assertNotNull(dbRef.get(), "Database was freed pre-emptively.");
+        assertNull(scannerRef.get(), "Scanner did not get freed.");
+
+        // Making the Database instance unreachable will then also free the Database.
+        db = null;
+        System.gc();
+        Thread.sleep(100);
+        assertNull(dbRef.get(), "Database did not get freed.");
+        assertNull(scannerRef.get(), "Scanner did not get freed.");
+    }
+
+    @Test
+    void scannerKeepsDatabaseAlive() throws InterruptedException {
+        Database db = new Database(expressions, BLOCK_MODE);
+        BlockScanner scanner = new BlockScanner(db);
+        WeakReference<Database> dbRef = new WeakReference<>(db);
+        WeakReference<BlockScanner> scannerRef = new WeakReference<>(scanner);
+        assertNotNull(dbRef.get(), "Database was freed pre-emptively.");
+        assertNotNull(scannerRef.get(), "BlockScanner was freed pre-emptively.");
+
+        // The BlockScanner keeps the Database alive, so it won't get garbage collected.
+        db = null;
+        System.gc();
+        Thread.sleep(100);
+        assertNotNull(dbRef.get(), "Database was freed pre-emptively.");
+        assertNotNull(scannerRef.get(), "Scanner was freed pre-emptively.");
+
+        // Also losing the strong reference to the BlockScanner will cascade the freeing operation to the Database
+        scanner = null;
+        System.gc();
+        Thread.sleep(100);
+
+        assertNull(dbRef.get(), "Database did not get freed.");
+        assertNull(scannerRef.get(), "Scanner did not get freed.");
     }
 }
