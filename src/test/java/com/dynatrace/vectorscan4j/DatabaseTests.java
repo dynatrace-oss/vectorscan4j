@@ -26,6 +26,7 @@ import com.dynatrace.vectorscan4j.constants.ExecutionMode;
 import com.dynatrace.vectorscan4j.constants.Flags;
 import com.dynatrace.vectorscan4j.internal.NativeLoader;
 import java.io.*;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -123,26 +124,6 @@ public class DatabaseTests {
             int scanner2matches = nMatches;
             assertEquals(scanner1matches, scanner2matches);
         }
-    }
-
-    @Test
-    void notClosingStillFreesMemory() {
-        Database db = new Database(expressions, BLOCK_MODE);
-        db = null;
-
-        // Ask the JVM to collect and run pending cleanup actions.
-        for (int i = 0; i < 10; i++) {
-            System.gc();
-            try {
-                Thread.sleep(100);
-            } catch (InterruptedException e) {
-                IO.println("Thread interrupted.");
-                Thread.currentThread().interrupt();
-                break;
-            }
-        }
-
-        System.out.println("Main method finished");
     }
 
     @Test
@@ -322,5 +303,17 @@ public class DatabaseTests {
             assertDoesNotThrow(db::getInfo);
             assertDoesNotThrow(() -> db.serialize());
         }
+    }
+
+    @Test
+    void notClosingStillFreesMemory() throws InterruptedException {
+        Database db = new Database(expressions, BLOCK_MODE);
+        WeakReference<Database> dbRef = new WeakReference<>(db);
+        assertNotNull(dbRef.get(), "Database was freed pre-emptively.");
+        db = null;
+
+        System.gc();
+        Thread.sleep(100);
+        assertNull(dbRef.get(), "Database did not get freed.");
     }
 }
