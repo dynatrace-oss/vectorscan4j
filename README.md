@@ -46,7 +46,7 @@ implementation "com.dynatrace.vectorscan4j:vectorscan4j:0.1.0"
 
 ### Requirements
 
-- **Java 25+** (uses the [Foreign Function & Memory API](https://docs.oracle.com/en/java/javase/25/core/foreign-function-and-memory-api.html))
+- **Java 22+** (uses the [Foreign Function & Memory API](https://docs.oracle.com/en/java/javase/25/core/foreign-function-and-memory-api.html))
 - **Linux** (x86-64 or aarch64) — native vectorscan binaries are bundled in the JAR
 
 ## Usage
@@ -138,7 +138,7 @@ vectorscan4j provides utility methods for serializing and deserializing a Databa
             // ... save dbBytes to file, or send over network ...
 
 
-            // ... after loading dbBytes from a file ...
+            // load dbBytes from a file, then deserialize
             Database roundTripDb = Database.deserialize(dbBytes);
             roundTripDb.close();
         }
@@ -147,11 +147,11 @@ vectorscan4j provides utility methods for serializing and deserializing a Databa
 
 ## Incorrect Usage Patterns
 
-There is a number of things to watch out for in terms of how to use the wrapper which can lead to memory leaks, undefined behavior, or break the JVM.
+There is a small number of niche things to watch out for in terms of how to use the wrapper which can lead to undefined behavior, or break the JVM.
 
 ### 1. Not closing Database / Scanner objects
 
-Database- and Scanner objects both hold native memory. Calling close() on those objects will clean the native memory 
+Database- and Scanner objects both hold native memory, i.e. memory that is not managed by the JVM Runtime. Calling close() on those objects will clean the native memory 
 that they are holding. This memory will *also* be freed if one doesn't call the close() explicitly. However, in 
 that case it will only happen when the Database- or Scanner object gets garbage collected (which might be far in
 the future).
@@ -165,9 +165,8 @@ the future).
         // -> Its native memory gets freed, but not immediately.
     }
 ```
-This might still be a problem, as the garbage collector might not get called for a long time (because the bulk of the 
-data was lying off-heap, so the JVM doesn't see any memory issues).
-Thus, the easiest and safest usage pattern to ensure that memory doesn't accumulate is through a try-with-resources-block:
+For more optimal memory usage, either manually close Database and/or Scanner objects by calling the close() method,
+ or initialize them with a try-with-resources-block:
 ``` java
     // This function is safe to call
     void createDbSafe() {
@@ -223,8 +222,8 @@ This is due to how the Foreign Function & Memory API handles exceptions thrown d
 
 ### 4. Using the same Scanner concurrently in multiple threads
 
-A Scanner object maintains an internal scratch space, which is not safe to use in multiple threads. 
-Using the same Scanner concurrently leads to undefined behavior.
+A Scanner object maintains an internal scratch space, which is not safe to use from multiple threads. 
+Using the same Scanner from multiple threads will throw a VectorscanException.
 
 ## Limitations
 

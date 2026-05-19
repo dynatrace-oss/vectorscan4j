@@ -30,6 +30,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.concurrent.*;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 public class DatabaseTests {
@@ -87,9 +89,7 @@ public class DatabaseTests {
                 new Expression("pat1", EnumSet.noneOf(Flags.class)),
                 new Expression("pat2", EnumSet.noneOf(Flags.class)));
         try (Database database = new Database(expr, ExecutionMode.BLOCK_MODE)) {
-            IO.println(database.getExpression(0));
             expr.set(0, new Expression("pat3", EnumSet.noneOf(Flags.class)));
-            IO.println(database.getExpression(0));
         }
     }
 
@@ -267,6 +267,8 @@ public class DatabaseTests {
         List<Expression> mutable = new ArrayList<>(List.of(new Expression("pat1"), new Expression("pat2")));
 
         try (Database db = new Database(mutable, BLOCK_MODE)) {
+            BlockScanner scannerBefore = new BlockScanner(db);
+
             // Mutate the original list after database creation
             mutable.set(0, new Expression("REPLACED"));
             mutable.add(new Expression("pat3"));
@@ -275,6 +277,29 @@ public class DatabaseTests {
             assertEquals(2, db.getNumExpressions());
             assertEquals("pat1", db.getExpression(0).pattern());
             assertEquals("pat2", db.getExpression(1).pattern());
+
+            // Scanners created before and after mutations should find the same patterns
+            BlockScanner scannerAfter = new BlockScanner(db);
+            String input = "We have pat1 and pat2 in this string";
+
+            List<Integer> beforeMatches = new ArrayList<>();
+            scannerBefore.scan(input, (id, _, _, _) -> {
+                beforeMatches.add(id);
+                return true;
+            });
+
+            List<Integer> afterMatches = new ArrayList<>();
+            scannerAfter.scan(input, (id, _, _, _) -> {
+                afterMatches.add(id);
+                return true;
+            });
+
+            // Both scanners should find pat1 (id=0) and pat2 (id=1) once
+            assertEquals(List.of(0, 1), beforeMatches);
+            assertEquals(List.of(0, 1), afterMatches);
+
+            scannerBefore.close();
+            scannerAfter.close();
         }
     }
 
@@ -309,5 +334,55 @@ public class DatabaseTests {
         System.gc();
         Thread.sleep(100);
         assertNull(dbRef.get(), "Database did not get freed.");
+    }
+
+    @Test
+    void useDatabaseFromMultipleThreads() throws Exception {
+        List<Expression> exprs = List.of(new Expression("pat1"), new Expression("pat2"));
+        String input = "pat1 xx pat1 yy pat1";
+
+        int nThreads = 256;
+        Database db = new Database(exprs, BLOCK_MODE);
+        List<BlockScanner> scanners =
+                Stream.generate(() -> new BlockScanner(db)).limit(nThreads).toList();
+        CyclicBarrier allMatched = new CyclicBarrier(nThreads);
+        ExecutorService pool = Executors.newFixedThreadPool(nThreads);
+        try {
+            List<Future<List<Integer>>> futures = new ArrayList<>();
+            for (int i = 0; i < nThreads; i++) {
+                int finalI = i;
+                Future<List<Integer>> f = pool.submit(() -> {
+                    List<Integer> matchedIds = new ArrayList<>();
+                    scanners.get(finalI).scan(input, (id, _, _, _) -> {
+                        try {
+                            allMatched.await(); // all scanners wait for each other to find a match until they continue.
+                            matchedIds.add(id);
+                        } catch (Exception _) {
+                        }
+                        return true;
+                    });
+                    return matchedIds;
+                });
+                futures.add(f);
+            }
+
+            List<List<Integer>> allMatches = new ArrayList<>();
+            for (Future<List<Integer>> f : futures) {
+                allMatches.add(f.get());
+            }
+
+            // Every scanner scanned the same input, so each should have found the same match IDs.
+            List<Integer> expected = List.of(0, 0, 0);
+            for (List<Integer> matches : allMatches) {
+                assertEquals(expected, matches);
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+
+        db.close();
+        for (var scanner : scanners) {
+            scanner.close();
+        }
     }
 }

@@ -30,9 +30,7 @@ import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
+import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 
 public class BlockScannerTests {
@@ -58,8 +56,7 @@ public class BlockScannerTests {
             String input = "I am searching for pattern1, has anyone seen pattern1?";
             List<Integer> matchedIds = new ArrayList<>();
 
-            scanner.scan(input, (id, from, to, _) -> {
-                IO.println(String.format("Match pattern with id %d, from %d to %d", id, from, to));
+            scanner.scan(input, (id, _, _, _) -> {
                 matchedIds.add(id);
                 return true;
             });
@@ -262,12 +259,8 @@ public class BlockScannerTests {
                 return true;
             });
         }
-        for (int i = 0; i < exprs.size(); i++) {
-            IO.println(String.format("%s -> matched %d times.", exprs.get(i).pattern(), countsById[i]));
-        }
-        // foo -> matched 3 times.
-        // bar -> matched 2 times.
-        // qux -> matched 0 times.
+        int[] a = {3, 2, 0};
+        assertArrayEquals(a, countsById);
     }
 
     @Test
@@ -442,5 +435,32 @@ public class BlockScannerTests {
 
         assertNull(dbRef.get(), "Database did not get freed.");
         assertNull(scannerRef.get(), "Scanner did not get freed.");
+    }
+
+    @Test
+    void usingScannerFromMultipleThreadsThrowsVectorscanException() throws Exception {
+        Database db = new Database(expressions, BLOCK_MODE);
+        BlockScanner scanner = new BlockScanner(db);
+
+        ExecutorService service = Executors.newFixedThreadPool(2);
+        try {
+            CountDownLatch stop = new CountDownLatch(1);
+            CountDownLatch scannerInUse = new CountDownLatch(1);
+            OnMatchEventHandler handler = (_, _, _, _) -> {
+                try {
+                    scannerInUse.countDown();
+                    stop.await();
+                } catch (InterruptedException _) {
+                }
+                return true;
+            };
+            service.submit(() -> scanner.scan("pattern1 ", handler));
+            scannerInUse.await(); // wait until the scanner has found a match, meaning it is currently in use.
+            assertThrows(VectorscanException.class, () -> scanner.scan("pattern1 ", doNothing));
+            stop.countDown();
+        } finally {
+            service.shutdown();
+            assertTrue(service.awaitTermination(1L, TimeUnit.SECONDS));
+        }
     }
 }

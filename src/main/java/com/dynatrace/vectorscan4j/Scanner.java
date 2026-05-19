@@ -39,7 +39,7 @@ abstract class Scanner implements AutoCloseable {
     protected final MemorySegment scratch;
     private final CallHandlerOnMatch callHandler = new CallHandlerOnMatch();
     protected MemorySegment funcPtr = VectorscanMatchEventHandler.allocate(callHandler, arena);
-    ;
+
     protected final CleanupState cleanupState;
     private final Cleaner.Cleanable cleanable;
 
@@ -89,8 +89,6 @@ abstract class Scanner implements AutoCloseable {
     }
 
     protected Scanner(Database database) {
-        CallHandlerOnMatch callHandler = new CallHandlerOnMatch();
-
         this.database = database;
 
         // allocate scratch space
