@@ -21,104 +21,71 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.BenchmarkMode;
-import org.openjdk.jmh.annotations.Fork;
-import org.openjdk.jmh.annotations.Level;
-import org.openjdk.jmh.annotations.Measurement;
-import org.openjdk.jmh.annotations.Mode;
-import org.openjdk.jmh.annotations.OutputTimeUnit;
-import org.openjdk.jmh.annotations.Param;
-import org.openjdk.jmh.annotations.Scope;
-import org.openjdk.jmh.annotations.Setup;
-import org.openjdk.jmh.annotations.State;
-import org.openjdk.jmh.annotations.TearDown;
-import org.openjdk.jmh.annotations.Warmup;
-import org.openjdk.jmh.infra.Blackhole;
+import org.openjdk.jmh.annotations.*;
 
 /**
- * Benchmark for workloads with a very high number of tiny scan calls.
+ * Benchmark for workloads with a large number of tiny scan calls.
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
 @State(Scope.Thread)
-@Warmup(iterations = 2, time = 5)
-@Measurement(iterations = 3, time = 10)
+@Warmup(iterations = 1, time = 1)
+@Measurement(iterations = 1, time = 5)
 @Fork(1)
 public class FastScanCallsBenchmark {
-
     @Benchmark
-    public void manySmallByteArrayScans(BenchmarkState state, Blackhole bh) {
-        state.resetMatches();
-        for (int i = 0; i < state.scansPerInvocation; i++) {
-            state.scanner.scan(state.inputBytes, state.countMatches);
-        }
-        bh.consume(state.matches);
+    public void byteBuffer(BenchmarkState state, CounterState cstate) {
+        state.input.clear();
+        state.scanner.scan(state.input, cstate.countMatches);
+        cstate.MBperSecond += (double) state.inputSize / (1024.0 * 1024.0);
     }
 
-    @Benchmark
-    public void manySmallDirectByteBufferScans(BenchmarkState state, Blackhole bh) {
-        state.resetMatches();
-        for (int i = 0; i < state.scansPerInvocation; i++) {
-            state.inputBuffer.position(0);
-            state.inputBuffer.limit(state.inputBuffer.capacity());
-            state.scanner.scan(state.inputBuffer, state.countMatches);
-        }
-        bh.consume(state.matches);
-    }
+    @State(Scope.Thread)
+    @AuxCounters(AuxCounters.Type.OPERATIONS)
+    public static class CounterState {
+        public double MBperSecond;
+        public long matchesPerSecond;
 
-    @Benchmark
-    public void manySmallNoMatchByteArrayScans(BenchmarkState state, Blackhole bh) {
-        state.resetMatches();
-        for (int i = 0; i < state.scansPerInvocation; i++) {
-            state.scanner.scan(state.noMatchInputBytes, state.countMatches);
-        }
-        // Should remain 0 because input is built to contain no 'a'.
-        bh.consume(state.matches);
+        final OnMatchEventHandler countMatches = ((_, _, _, _) -> {
+            matchesPerSecond += 1;
+            return true;
+        });
     }
 
     @State(Scope.Thread)
     public static class BenchmarkState {
-        @Param({"10000"})
-        public int scansPerInvocation;
-
-        @Param({"128"})
+        @Param({"256", "16384", "65536"})
         public int inputSize;
+
+        @Param({"false", "true"})
+        public boolean inputBufferIsDirect;
+
+        @Param({"false", "true"})
+        public boolean inputHasMatches;
 
         BlockScanner scanner;
         Database db;
-        byte[] inputBytes;
-        byte[] noMatchInputBytes;
-        ByteBuffer inputBuffer;
-        int matches;
-
-        final OnMatchEventHandler countMatches = ((_, _, _, _) -> {
-            matches += 1;
-            return true;
-        });
+        ByteBuffer input;
 
         @Setup(Level.Trial)
         public void setup() {
             db = new Database(List.of(new Expression("a")), BLOCK_MODE);
             scanner = new BlockScanner(db);
 
-            String payload = "z".repeat(Math.max(1, inputSize - 1)) + "a";
-            inputBytes = payload.getBytes(StandardCharsets.US_ASCII);
-            noMatchInputBytes = "z".repeat(Math.max(1, inputSize)).getBytes(StandardCharsets.US_ASCII);
-
-            inputBuffer = ByteBuffer.allocateDirect(inputBytes.length);
-            inputBuffer.put(inputBytes);
-            inputBuffer.flip();
+            String payload = "z".repeat(inputSize - 1);
+            payload += inputHasMatches ? "a" : "z";
+            byte[] inputBytes = payload.getBytes(StandardCharsets.US_ASCII);
+            input = inputBufferIsDirect
+                    ? ByteBuffer.allocateDirect(inputBytes.length)
+                    : ByteBuffer.allocate(inputBytes.length);
+            input.put(inputBytes);
+            input.flip();
         }
 
         @TearDown(Level.Trial)
         public void tearDown() {
             scanner.close();
             db.close();
-        }
-
-        void resetMatches() {
-            matches = 0;
         }
     }
 }
