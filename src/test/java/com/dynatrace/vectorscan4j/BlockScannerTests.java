@@ -442,7 +442,7 @@ public class BlockScannerTests {
         Database db = new Database(expressions, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);
 
-        ExecutorService service = Executors.newFixedThreadPool(2);
+        ExecutorService service = Executors.newFixedThreadPool(1);
         try {
             CountDownLatch stop = new CountDownLatch(1);
             CountDownLatch scannerInUse = new CountDownLatch(1);

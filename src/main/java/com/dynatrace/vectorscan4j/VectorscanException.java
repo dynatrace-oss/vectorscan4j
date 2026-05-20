@@ -16,11 +16,19 @@
 package com.dynatrace.vectorscan4j;
 
 import com.dynatrace.vectorscan4j.constants.ErrorCode;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class VectorscanException extends RuntimeException {
-    public VectorscanException(ErrorCode code) {
+    // reverse lookup from C++ error code type (a.k.a. int) to vectorscan4j ErrorCode
+    private static final Map<Integer, ErrorCode> BY_CODE =
+            Arrays.stream(ErrorCode.values()).collect(Collectors.toMap(ErrorCode::getCode, Function.identity()));
+
+    public VectorscanException(int code) {
         super(String.format(
                 "Failure in native Vectorscan call. ErrorCode: %s. Consult official Hyperscan/Vectorscan documentation for more information.",
-                code));
+                BY_CODE.get(code)));
     }
 }

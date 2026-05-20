@@ -20,7 +20,6 @@ import static com.dynatrace.vectorscan4j.constants.ErrorCode.HS_SUCCESS;
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.BLOCK_MODE;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNative.hs_scan;
 
-import com.dynatrace.vectorscan4j.constants.ErrorCode;
 import java.lang.foreign.MemorySegment;
 
 /**
@@ -80,9 +79,8 @@ public class BlockScanner extends Scanner {
         setHandler(handler);
         var ctx = MemorySegment.NULL;
         int ans = hs_scan(this.database().dbNative, data, (int) data.byteSize(), 0, scratch, funcPtr, ctx);
-        ErrorCode errorCode = ErrorCode.fromCode(ans);
-        if (!errorCode.equals(HS_SUCCESS) && !errorCode.equals(HS_SCAN_TERMINATED)) {
-            throw new VectorscanException(errorCode);
+        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
+            throw new VectorscanException(ans);
         }
     }
 }

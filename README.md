@@ -259,6 +259,7 @@ The corresponding third-party notice and license reproduction is provided in:
 - `THIRD_PARTY_NOTICES.md`
 - `src/main/resources/native/THIRD_PARTY_NOTICES.txt`
 
+
 ## Contributing
 
 This wrapper currently supports a core subset of vectorscan's features, but not everything. 

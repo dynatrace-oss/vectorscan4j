@@ -20,7 +20,6 @@ import static com.dynatrace.vectorscan4j.internal.VectorscanNative.hs_alloc_scra
 import static com.dynatrace.vectorscan4j.internal.VectorscanNative.hs_free_scratch;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNativeShared.C_POINTER;
 
-import com.dynatrace.vectorscan4j.constants.ErrorCode;
 import com.dynatrace.vectorscan4j.internal.VectorscanMatchEventHandler;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
@@ -30,7 +29,7 @@ import java.nio.charset.StandardCharsets;
 
 abstract class Scanner implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
-    private long bufferCapacity = 1024L; // 1KB default buffer size
+    private long bufferCapacity = 0L; // initally internal buffer is empty
     private int bufferLength;
     private Arena dataArena = Arena.ofShared();
     private MemorySegment dataSegment = dataArena.allocate(bufferCapacity);
@@ -94,9 +93,8 @@ abstract class Scanner implements AutoCloseable {
         // allocate scratch space
         MemorySegment scratchPtr = arena.allocate(C_POINTER);
         int ans = hs_alloc_scratch(database.dbNative, scratchPtr);
-        ErrorCode errorCode = ErrorCode.fromCode(ans);
-        if (!errorCode.equals(HS_SUCCESS)) {
-            throw new VectorscanException(errorCode);
+        if (ans != HS_SUCCESS.getCode()) {
+            throw new VectorscanException(ans);
         }
         scratch = scratchPtr.getAtIndex(C_POINTER, 0);
         this.cleanupState = new CleanupState(scratch, dataArena, arena);

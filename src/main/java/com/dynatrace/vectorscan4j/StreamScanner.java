@@ -22,7 +22,6 @@ import static com.dynatrace.vectorscan4j.internal.VectorscanNative.*;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNative.hs_close_stream;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNativeShared.C_POINTER;
 
-import com.dynatrace.vectorscan4j.constants.ErrorCode;
 import java.lang.foreign.MemorySegment;
 
 /**
@@ -89,9 +88,8 @@ public class StreamScanner extends Scanner {
         }
         setHandler(handler);
         int ans = hs_scan_stream(stream, data, (int) data.byteSize(), 0, scratch, funcPtr, MemorySegment.NULL);
-        ErrorCode errorCode = ErrorCode.fromCode(ans);
-        if (!errorCode.equals(HS_SUCCESS) && !errorCode.equals(HS_SCAN_TERMINATED)) {
-            throw new VectorscanException(errorCode);
+        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
+            throw new VectorscanException(ans);
         }
     }
 
@@ -122,9 +120,8 @@ public class StreamScanner extends Scanner {
     public void resetStream(OnMatchEventHandler handler) {
         setHandler(handler);
         int ans = hs_reset_stream(stream, 0, scratch, funcPtr, MemorySegment.NULL);
-        ErrorCode errorCode = ErrorCode.fromCode(ans);
-        if (!errorCode.equals(HS_SUCCESS)) {
-            throw new VectorscanException(errorCode);
+        if (ans != HS_SUCCESS.getCode()) {
+            throw new VectorscanException(ans);
         }
         streamOpen = true;
     }
@@ -142,9 +139,8 @@ public class StreamScanner extends Scanner {
         if (!streamOpen) return;
         setHandler(handler);
         int ans = hs_close_stream(stream, scratch, funcPtr, MemorySegment.NULL);
-        ErrorCode errorCode = ErrorCode.fromCode(ans);
-        if (!errorCode.equals(HS_SUCCESS)) {
-            throw new VectorscanException(errorCode);
+        if (ans != HS_SUCCESS.getCode()) {
+            throw new VectorscanException(ans);
         }
         stream = MemorySegment.NULL;
         streamOpen = false;

@@ -19,7 +19,6 @@ import static com.dynatrace.vectorscan4j.constants.ErrorCode.*;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNative.*;
 import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
-import com.dynatrace.vectorscan4j.constants.ErrorCode;
 import com.dynatrace.vectorscan4j.constants.ExecutionMode;
 import com.dynatrace.vectorscan4j.internal.VectorscanCompileError;
 import java.io.*;
@@ -112,8 +111,7 @@ public class Database implements AutoCloseable {
         // compile
         var platform = MemorySegment.NULL;
         int ans = hs_compile_multi(patterns, flags, ids, nElems, modeNative, platform, dbPtr, errorPtr);
-        ErrorCode errorCode = ErrorCode.fromCode(ans);
-        if (errorCode.equals(HS_COMPILER_ERROR)) {
+        if (ans == HS_COMPILER_ERROR.getCode()) {
             var compileError = errorPtr.getAtIndex(C_POINTER, 0);
             int exprId = VectorscanCompileError.expression(compileError);
             String msg = VectorscanCompileError.message(compileError).getString(0);
@@ -142,8 +140,7 @@ public class Database implements AutoCloseable {
             MemorySegment bytesPtr = temp.allocate(C_POINTER);
             MemorySegment lengthPtr = temp.allocate(C_LONG);
             int ans = hs_serialize_database(dbNative, bytesPtr, lengthPtr);
-            ErrorCode errorCode = ErrorCode.fromCode(ans);
-            if (!errorCode.equals(HS_SUCCESS)) throw new VectorscanException(errorCode);
+            if (ans != HS_SUCCESS.getCode()) throw new VectorscanException(ans);
 
             long length = lengthPtr.getAtIndex(JAVA_LONG, 0);
             MemorySegment bytesSeg = bytesPtr.getAtIndex(C_POINTER, 0);
@@ -229,9 +226,8 @@ public class Database implements AutoCloseable {
             try {
                 MemorySegment dbPtr = arena.allocate(C_POINTER);
                 int ans = hs_deserialize_database(dbBytesPtr, dbBytes.length, dbPtr);
-                ErrorCode errorCode = ErrorCode.fromCode(ans);
-                if (!errorCode.equals(HS_SUCCESS)) {
-                    throw new VectorscanException(errorCode);
+                if (ans != HS_SUCCESS.getCode()) {
+                    throw new VectorscanException(ans);
                 }
                 MemorySegment dbNative = dbPtr.getAtIndex(C_POINTER, 0);
                 return new Database(arena, dbNative, expressions, mode);
@@ -268,9 +264,8 @@ public class Database implements AutoCloseable {
         try (Arena temp = Arena.ofConfined()) {
             MemorySegment databaseSize = temp.allocate(C_LONG, 1);
             int ans = hs_database_size(this.dbNative, databaseSize);
-            ErrorCode errorCode = ErrorCode.fromCode(ans);
-            if (!errorCode.equals(HS_SUCCESS)) {
-                throw new VectorscanException(errorCode);
+            if (ans != HS_SUCCESS.getCode()) {
+                throw new VectorscanException(ans);
             }
             return databaseSize.getAtIndex(JAVA_LONG, 0);
         }
@@ -286,9 +281,8 @@ public class Database implements AutoCloseable {
         try (Arena temp = Arena.ofConfined()) {
             MemorySegment infoPtr = temp.allocate(C_POINTER, 1);
             int ans = hs_database_info(this.dbNative, infoPtr);
-            ErrorCode errorCode = ErrorCode.fromCode(ans);
-            if (!errorCode.equals(HS_SUCCESS)) {
-                throw new VectorscanException(errorCode);
+            if (ans != HS_SUCCESS.getCode()) {
+                throw new VectorscanException(ans);
             }
             MemorySegment databaseInfo = infoPtr.get(C_POINTER, 0);
 

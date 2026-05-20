@@ -15,11 +15,6 @@
 */
 package com.dynatrace.vectorscan4j.constants;
 
-import java.util.Arrays;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
-
 public enum ErrorCode {
     /** The engine completed normally. */
     HS_SUCCESS(0),
@@ -95,13 +90,5 @@ public enum ErrorCode {
 
     public int getCode() {
         return code;
-    }
-
-    // reverse lookup table for fast lookups
-    private static final Map<Integer, ErrorCode> BY_CODE =
-            Arrays.stream(values()).collect(Collectors.toMap(ErrorCode::getCode, Function.identity()));
-
-    public static ErrorCode fromCode(int code) {
-        return BY_CODE.get(code);
     }
 }
