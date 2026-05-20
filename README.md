@@ -138,7 +138,7 @@ vectorscan4j provides utility methods for serializing and deserializing a Databa
             // ... save dbBytes to file, or send over network ...
 
 
-            // load dbBytes from a file, then deserialize
+            // ...after e.g. reading bytes from a file, deserialize to Database. 
             Database roundTripDb = Database.deserialize(dbBytes);
             roundTripDb.close();
         }
@@ -147,7 +147,7 @@ vectorscan4j provides utility methods for serializing and deserializing a Databa
 
 ## Incorrect Usage Patterns
 
-There is a small number of niche things to watch out for in terms of how to use the wrapper which can lead to undefined behavior, or break the JVM.
+A small number of niche usage patterns can lead to undefined behavior, or break the JVM.
 
 ### 1. Not closing Database / Scanner objects
 
@@ -218,7 +218,7 @@ try (try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
 }
 ```
 
-This is due to how the Foreign Function & Memory API handles exceptions thrown during native upcalls.
+This is due to how the Foreign Function & Memory API handles exceptions thrown during native upcalls back to Java code.
 
 ### 4. Using the same Scanner concurrently in multiple threads
 
@@ -258,7 +258,6 @@ The corresponding third-party notice and license reproduction is provided in:
 
 - `THIRD_PARTY_NOTICES.md`
 - `src/main/resources/native/THIRD_PARTY_NOTICES.txt`
-
 
 ## Contributing
 
