@@ -38,7 +38,6 @@ import org.openjdk.jmh.infra.Blackhole;
  * matching scan on a large file, counting the total number of matches.
  */
 @BenchmarkMode(Mode.Throughput)
-@State(Scope.Thread)
 @OutputTimeUnit(TimeUnit.SECONDS)
 @Measurement(iterations = 1, time = 30)
 @Warmup(iterations = 1, time = 10)

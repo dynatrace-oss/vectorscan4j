@@ -28,7 +28,6 @@ import org.openjdk.jmh.annotations.*;
  */
 @BenchmarkMode(Mode.Throughput)
 @OutputTimeUnit(TimeUnit.SECONDS)
-@State(Scope.Thread)
 @Warmup(iterations = 1, time = 1)
 @Measurement(iterations = 1, time = 5)
 @Fork(1)

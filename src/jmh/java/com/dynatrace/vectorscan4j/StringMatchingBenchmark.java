@@ -38,14 +38,12 @@ import org.openjdk.jmh.infra.Blackhole;
  * matching scan on a large file, counting the total number of matches.
  */
 @BenchmarkMode(Mode.Throughput)
-@State(Scope.Thread)
 @OutputTimeUnit(TimeUnit.SECONDS)
 @Measurement(iterations = 1, time = 30)
 @Warmup(iterations = 1, time = 10)
 @Fork(1)
 public class StringMatchingBenchmark {
     private static int nMatches;
-
     private static final OnMatchEventHandler countMatch = ((_, _, _, _) -> {
         nMatches += 1;
         return true;
