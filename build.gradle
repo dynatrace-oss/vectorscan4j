@@ -67,16 +67,9 @@ spotless {
     }
 }
 
-def jmhIncludes = findProperty('jmhIncludes')
-def jmhProfile = findProperty('jmhProfile')
 jmh {
     includeTests = false
-    if (jmhIncludes) {
-        includes = [jmhIncludes] as Iterable<? extends String>
-    }
-    if (jmhProfile) {
-        profilers = ["async:libPath=${System.getenv('ASYNC_PROFILER_PATH')};event=cpu;output=flamegraph;direction=forward;dir=build/results/jmh"] as Iterable<? extends String>
-    }
+    jvmArgsAppend = ["--sun-misc-unsafe-memory-access=allow"]
 }
 
 tasks.named("jar") {
