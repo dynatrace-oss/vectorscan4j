@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "com.dynatrace.vectorscan4j"
-version = "0.1.1-SNAPSHOT"
+version = "0.2.1-SNAPSHOT"
 
 repositories {
     mavenCentral()
@@ -125,7 +125,7 @@ publishing {
 }
 
 signing {
-    useInMemoryPgpKeys(System.getenv("GPG_PRIVATE_KEY"), System.getenv("GPG_PASSPHRASE"))
+    useGpgCmd()
     sign publishing.publications.mavenJava
 }
 

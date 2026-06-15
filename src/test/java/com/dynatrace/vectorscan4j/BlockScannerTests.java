@@ -463,4 +463,57 @@ public class BlockScannerTests {
             assertTrue(service.awaitTermination(1L, TimeUnit.SECONDS));
         }
     }
+
+    @Test
+    void twoScannersWithSameDatabaseCanScanConcurrently() throws Exception {
+        List<Expression> exprs = List.of(new Expression("pattern1"));
+        try (Database db = new Database(exprs, BLOCK_MODE);
+                BlockScanner scanner1 = new BlockScanner(db);
+                BlockScanner scanner2 = new BlockScanner(db)) {
+            ExecutorService pool = Executors.newFixedThreadPool(2);
+            try {
+                CountDownLatch handlersEntered = new CountDownLatch(2);
+                CountDownLatch continueScanning = new CountDownLatch(1);
+                List<Integer> scanner1Matches = Collections.synchronizedList(new ArrayList<>());
+                List<Integer> scanner2Matches = Collections.synchronizedList(new ArrayList<>());
+
+                OnMatchEventHandler handler1 = (id, _, _, _) -> {
+                    scanner1Matches.add(id);
+                    handlersEntered.countDown();
+                    try {
+                        continueScanning.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new AssertionError(e);
+                    }
+                    return true;
+                };
+                OnMatchEventHandler handler2 = (id, _, _, _) -> {
+                    scanner2Matches.add(id);
+                    handlersEntered.countDown();
+                    try {
+                        continueScanning.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new AssertionError(e);
+                    }
+                    return true;
+                };
+
+                Future<?> first = pool.submit(() -> scanner1.scan("pattern1 pattern1", handler1));
+                Future<?> second = pool.submit(() -> scanner2.scan("pattern1 pattern1", handler2));
+
+                assertTrue(handlersEntered.await(1, TimeUnit.SECONDS));
+                continueScanning.countDown();
+                first.get();
+                second.get();
+
+                assertEquals(List.of(0, 0), scanner1Matches);
+                assertEquals(List.of(0, 0), scanner2Matches);
+            } finally {
+                pool.shutdown();
+                assertTrue(pool.awaitTermination(1L, TimeUnit.SECONDS));
+            }
+        }
+    }
 }
