@@ -69,7 +69,6 @@ spotless {
 
 jmh {
     includeTests = false
-    jvmArgsAppend = ["--sun-misc-unsafe-memory-access=allow"]
 }
 
 tasks.named("jar") {
