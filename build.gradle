@@ -52,7 +52,28 @@ tasks.withType(Test).configureEach {
             "-XX:HeapDumpPath=${layout.buildDirectory}/heapdumps",
             "--enable-native-access=ALL-UNNAMED"
     ]
+    systemProperty "vs4j.native.countMatches",
+            layout.buildDirectory.file("native/libvs4j_count_matches.so").get().asFile.absolutePath
 }
+
+// Build a tiny native shared library used by tests/benchmarks that exercise the
+// no-upcall scan path (see NativeMatchHandler). Skipped silently if cmake is missing.
+tasks.register('buildTestNativeCallback', Exec) {
+    def srcDir = file("src/test/native")
+    def outDir = layout.buildDirectory.dir("native").get().asFile
+    inputs.dir(srcDir)
+    outputs.dir(outDir)
+    doFirst { outDir.mkdirs() }
+    ignoreExitValue = true
+    commandLine 'sh', '-c',
+            "command -v cmake >/dev/null 2>&1 && " +
+            "cmake -S ${srcDir} -B ${outDir} -DCMAKE_BUILD_TYPE=Release && " +
+            "cmake --build ${outDir} --config Release || " +
+            "echo 'cmake not available or build failed; native-callback tests will be skipped.'"
+}
+
+tasks.named('test').configure { dependsOn 'buildTestNativeCallback' }
+tasks.matching { it.name == 'jmh' }.configureEach { dependsOn 'buildTestNativeCallback' }
 
 spotless {
     java {

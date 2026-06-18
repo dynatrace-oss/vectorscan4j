@@ -83,4 +83,42 @@ public class BlockScanner extends Scanner {
             throw new VectorscanException(ans);
         }
     }
+
+    /**
+     * Scans {@code data} using a <em>native</em> match-event callback supplied by the caller.
+     *
+     * <p>Unlike {@link #scan(MemorySegment, OnMatchEventHandler)}, this method passes the
+     * caller-provided native function pointer directly to vectorscan, so matches do
+     * <strong>not</strong> incur an upcall back into Java. This is intended for hot paths
+     * where the per-match Java callback dominates cost.
+     *
+     * <p>The supplied {@code handler} is trusted: the JVM cannot verify the function's true
+     * ABI from its address. The caller must ensure the underlying symbol matches the
+     * {@code match_event_handler} signature documented on {@link NativeMatchHandler}.
+     *
+     * @param data    memory region containing the bytes to scan; {@code byteSize()} must fit
+     *                into a Java {@code int}
+     * @param handler typed wrapper around the native callback and its opaque context
+     * @throws IllegalArgumentException if {@code data.byteSize()} exceeds {@link Integer#MAX_VALUE}
+     *                                  or {@code handler} is {@code null}
+     * @throws IllegalStateException    if the underlying {@link Database} has been closed
+     * @throws VectorscanException      if the native scan call returns an error other than
+     *                                  {@link com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
+     */
+    public void scan(MemorySegment data, NativeMatchHandler handler) {
+        if (handler == null) {
+            throw new IllegalArgumentException("handler must not be null");
+        }
+        if (data.byteSize() > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Input MemorySegment is too big.");
+        }
+        if (database.isClosed()) {
+            throw new IllegalStateException("Database was already closed.");
+        }
+        int ans = hs_scan(
+                this.database().dbNative, data, (int) data.byteSize(), 0, scratch, handler.fnPtr(), handler.context());
+        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
+            throw new VectorscanException(ans);
+        }
+    }
 }
