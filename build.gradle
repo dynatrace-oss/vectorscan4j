@@ -2,7 +2,6 @@ plugins {
     id "java-library"
     id "maven-publish"
     id "signing"
-    id "me.champeau.jmh" version "0.7.3"
     id "com.diffplug.spotless" version "8.3.0"
     id "jacoco"
 }
@@ -36,8 +35,6 @@ dependencies {
     testImplementation platform("org.junit:junit-bom:5.10.0")
     testImplementation "org.junit.jupiter:junit-jupiter"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.7.1"
-    jmhImplementation "org.openjdk.jmh:jmh-core:1.37"
-    jmhAnnotationProcessor "org.openjdk.jmh:jmh-generator-annprocess:1.37"
 }
 
 test {
@@ -45,19 +42,15 @@ test {
 }
 
 tasks.withType(Test).configureEach {
-    maxHeapSize = "4g"
     jvmArgs = [
-            "-Xlog:gc=debug:stdout",
-            "-XX:+HeapDumpOnOutOfMemoryError",
-            "-XX:HeapDumpPath=${layout.buildDirectory}/heapdumps",
             "--enable-native-access=ALL-UNNAMED"
     ]
     systemProperty "vs4j.native.countMatches",
             layout.buildDirectory.file("native/libvs4j_count_matches.so").get().asFile.absolutePath
 }
 
-// Build a tiny native shared library used by tests/benchmarks that exercise the
-// no-upcall scan path (see NativeMatchHandler). Skipped silently if cmake is missing.
+// Build a tiny native shared library used by tests that exercise the
+// no-upcall scan path (see NativeMatchHandler). Skipped silently if cc is missing.
 tasks.register('buildTestNativeCallback', Exec) {
     def srcDir = file("src/test/native")
     def outDir = layout.buildDirectory.dir("native").get().asFile
@@ -66,30 +59,20 @@ tasks.register('buildTestNativeCallback', Exec) {
     doFirst { outDir.mkdirs() }
     ignoreExitValue = true
     commandLine 'sh', '-c',
-            "command -v cmake >/dev/null 2>&1 && " +
-            "cmake -S ${srcDir} -B ${outDir} -DCMAKE_BUILD_TYPE=Release && " +
-            "cmake --build ${outDir} --config Release || " +
-            "echo 'cmake not available or build failed; native-callback tests will be skipped.'"
+            "command -v cc >/dev/null 2>&1 && " +
+            "cc -std=c11 -O3 -fPIC -shared " +
+            "-o ${outDir}/libvs4j_count_matches.so " +
+            "${srcDir}/count-matches-native.c || " +
+            "echo 'cc not available or build failed; native-callback tests will be skipped.'"
 }
 
 tasks.named('test').configure { dependsOn 'buildTestNativeCallback' }
-tasks.matching { it.name == 'jmh' }.configureEach { dependsOn 'buildTestNativeCallback' }
 
 spotless {
     java {
         palantirJavaFormat("2.90.0")
-        targetExclude "src/jmh/java/com/dynatrace/utils/RegexGenerator.java"
         licenseHeaderFile rootProject.file('spotless/HEADER.java')
     }
-
-    format('javaWithAttribution') {
-        target "src/jmh/java/com/dynatrace/utils/RegexGenerator.java"
-        licenseHeaderFile rootProject.file('spotless/HEADER_WITH_ATTRIBUTION.java'), 'package '
-    }
-}
-
-jmh {
-    includeTests = false
 }
 
 tasks.named("jar") {

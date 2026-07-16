@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
@@ -27,6 +28,7 @@ import java.lang.foreign.SymbolLookup;
 import java.lang.foreign.ValueLayout;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -38,8 +40,12 @@ import org.junit.jupiter.api.Test;
  * auto-skipped when it has not been built (via {@code buildTestNativeCallback}).
  */
 public class NativeMatchHandlerTests {
-    private static Path libPath() {
-        return Path.of(System.getProperty("vs4j.native.countMatches"));
+    private static Path requireNativeCallbackLibrary() {
+        String lib = System.getProperty("vs4j.native.countMatches");
+        assumeTrue(lib != null && !lib.isBlank(), "Native callback test library not configured.");
+        Path libPath = Path.of(lib);
+        assumeTrue(Files.isRegularFile(libPath), "Native callback test library not built: " + libPath);
+        return libPath;
     }
 
     // ---------- pure-Java validation (no native lib required) ----------
@@ -89,6 +95,7 @@ public class NativeMatchHandlerTests {
 
     @Test
     void nativeCallbackCountsSameAsJavaCallback() {
+        Path libPath = requireNativeCallbackLibrary();
         byte[] input = "the quick brown fox jumps over the lazy dog. the the the.".getBytes(StandardCharsets.UTF_8);
         List<Expression> exprs = List.of(new Expression("the"));
 
@@ -107,7 +114,7 @@ public class NativeMatchHandlerTests {
             MemorySegment ctx = arena.allocate(ValueLayout.JAVA_LONG);
             ctx.set(ValueLayout.JAVA_LONG, 0L, 0L);
 
-            NativeMatchHandler handler = NativeMatchHandler.fromLibrary(libPath(), "vs4j_count_matches", ctx, arena);
+            NativeMatchHandler handler = NativeMatchHandler.fromLibrary(libPath, "vs4j_count_matches", ctx, arena);
 
             MemorySegment data = arena.allocate(input.length);
             MemorySegment.copy(input, 0, data, ValueLayout.JAVA_BYTE, 0, input.length);
@@ -121,8 +128,9 @@ public class NativeMatchHandlerTests {
 
     @Test
     void fromLookupResolvesVersionedSymbol() {
+        Path libPath = requireNativeCallbackLibrary();
         try (Arena arena = Arena.ofConfined()) {
-            SymbolLookup lookup = SymbolLookup.libraryLookup(libPath(), arena);
+            SymbolLookup lookup = SymbolLookup.libraryLookup(libPath, arena);
             NativeMatchHandler handler =
                     NativeMatchHandler.fromLookup(lookup, "vs4j_count_matches", MemorySegment.NULL);
             assertNotEquals(MemorySegment.NULL, handler.fnPtr());
@@ -131,6 +139,7 @@ public class NativeMatchHandlerTests {
     // ---------- parity across input-type overloads (requires native lib) ----------
     @Test
     void allOverloadsAgreeWithJavaCallback() {
+        Path libPath = requireNativeCallbackLibrary();
         String text = "the the the quick the brown fox the the the the the the the the";
         byte[] bytes = text.getBytes(StandardCharsets.UTF_8);
         List<Expression> exprs = List.of(new Expression("the"));
@@ -146,7 +155,7 @@ public class NativeMatchHandlerTests {
             class CounterCtx {
                 final MemorySegment ctx = arena.allocate(ValueLayout.JAVA_LONG);
                 final NativeMatchHandler handler =
-                        NativeMatchHandler.fromLibrary(libPath(), "vs4j_count_matches", ctx, arena);
+                        NativeMatchHandler.fromLibrary(libPath, "vs4j_count_matches", ctx, arena);
 
                 long count() {
                     return ctx.get(ValueLayout.JAVA_LONG, 0L);
