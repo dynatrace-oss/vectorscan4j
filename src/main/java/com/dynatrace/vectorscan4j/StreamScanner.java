@@ -29,7 +29,7 @@ import java.lang.foreign.MemorySegment;
  *
  * <p>Stream scanning preserves matcher state across successive {@code
  * scan(...)} calls, which allows matches to span chunk boundaries. The stream state can be reset
- * with {@link #resetStream(OnMatchEventHandler handler)} or terminated with {@link #closeStream(OnMatchEventHandler)}. After
+ * with {@link #resetStream(MatchHandler handler)} or terminated with {@link #closeStream(MatchHandler)}. After
  * closing, a new state can be created via {@link #openStream()}.
  *
  * <p>Always close this scanner to release native resources deterministically. Prefer
@@ -76,7 +76,7 @@ public class StreamScanner extends Scanner {
      *     {@code false} to stop early
      * @throws VectorscanException if vectorscan reports an error other than early termination
      */
-    public void scan(MemorySegment data, OnMatchEventHandler handler) {
+    public void scan(MemorySegment data, MatchHandler handler) {
         if (database.isClosed()) {
             throw new IllegalStateException("Database was already closed.");
         }
@@ -96,7 +96,7 @@ public class StreamScanner extends Scanner {
     /**
      * Opens a new native stream state for this scanner.
      *
-     * <p>Use this after {@link #closeStream(OnMatchEventHandler)} when starting a fresh stream.
+     * <p>Use this after {@link #closeStream(MatchHandler)} when starting a fresh stream.
      *
      * @throws VectorscanException if vectorscan cannot open the stream
      */
@@ -120,7 +120,7 @@ public class StreamScanner extends Scanner {
      * @param handler callback used for any matches emitted during the reset
      * @throws VectorscanException if vectorscan reports an error during reset
      */
-    public void resetStream(OnMatchEventHandler handler) {
+    public void resetStream(MatchHandler handler) {
         setHandler(handler);
         int ans = hs_reset_stream(stream, 0, scratch, funcPtr, MemorySegment.NULL);
         if (ans != HS_SUCCESS.getCode()) {
@@ -138,7 +138,7 @@ public class StreamScanner extends Scanner {
      * @param handler callback used for any close-time matches
      * @throws VectorscanException if vectorscan reports an error while closing the stream
      */
-    public void closeStream(OnMatchEventHandler handler) {
+    public void closeStream(MatchHandler handler) {
         if (!streamOpen) return;
         setHandler(handler);
         int ans = hs_close_stream(stream, scratch, funcPtr, MemorySegment.NULL);

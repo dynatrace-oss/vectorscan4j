@@ -66,7 +66,7 @@ final class NativeLoader {
         if (os.contains("mac") || os.contains("darwin")) {
             return "macos";
         }
-        if (os.contains("nux") || os.contains("nix") || os.contains("linux")) {
+        if (os.contains("nux") || os.contains("nix")) {
             return "linux";
         }
         return os.replace(' ', '_');

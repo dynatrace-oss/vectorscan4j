@@ -37,7 +37,7 @@ public class StreamScannerTests {
             new Expression("pattern3", EnumSet.of(SOM_LEFTMOST, CASELESS)));
     static int nMatches = 0;
 
-    OnMatchEventHandler doNothing = (_, _, _, _) -> true;
+    MatchHandler doNothing = (_, _, _, _) -> true;
 
     @Test
     void databaseWrongMode() {
@@ -51,7 +51,7 @@ public class StreamScannerTests {
         try (Database db = new Database(expressions, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             List<Integer> matchIds = new ArrayList<>();
-            OnMatchEventHandler collectMatches = (id, _, _, _) -> {
+            MatchHandler collectMatches = (id, _, _, _) -> {
                 matchIds.add(id);
                 return true;
             };
@@ -68,7 +68,7 @@ public class StreamScannerTests {
         try (Database db = new Database(expressions, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             List<Integer> matchIds = new ArrayList<>();
-            OnMatchEventHandler collectMatches = (id, _, _, _) -> {
+            MatchHandler collectMatches = (id, _, _, _) -> {
                 matchIds.add(id);
                 return true;
             };
@@ -86,7 +86,7 @@ public class StreamScannerTests {
         try (Database db = new Database(expressions, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             List<Integer> matchIds = new ArrayList<>();
-            OnMatchEventHandler collectMatches = (id, _, _, _) -> {
+            MatchHandler collectMatches = (id, _, _, _) -> {
                 matchIds.add(id);
                 return true;
             };
@@ -102,10 +102,10 @@ public class StreamScannerTests {
 
     @Test
     void earlystopScan() {
-        // if an OnMatchEventHandler returns false, the execution of the engine stops early.
+        // if a MatchHandler returns false, the execution of the engine stops early.
         try (Database db = new Database(expressions, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
-            OnMatchEventHandler countMatchAndStop = (_, _, _, _) -> {
+            MatchHandler countMatchAndStop = (_, _, _, _) -> {
                 nMatches += 1;
                 return false;
             };
@@ -148,7 +148,7 @@ public class StreamScannerTests {
         try (Database db = new Database(expressions, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             List<Integer> matchIds = new ArrayList<>();
-            OnMatchEventHandler collectMatches = (id, _, _, _) -> {
+            MatchHandler collectMatches = (id, _, _, _) -> {
                 matchIds.add(id);
                 return true;
             };
@@ -239,7 +239,7 @@ public class StreamScannerTests {
         try (Database db = new Database(exprs, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             List<Integer> matchIds = new ArrayList<>();
-            OnMatchEventHandler collectMatches = (id, _, _, _) -> {
+            MatchHandler collectMatches = (id, _, _, _) -> {
                 matchIds.add(id);
                 return true;
             };
@@ -255,7 +255,7 @@ public class StreamScannerTests {
         List<Integer> userObserved = new ArrayList<>();
         try (Database db = new Database(exprs, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
-            OnMatchEventHandler collectMatches = (id, _, _, _) -> {
+            MatchHandler collectMatches = (id, _, _, _) -> {
                 userObserved.add(id);
                 return true;
             };

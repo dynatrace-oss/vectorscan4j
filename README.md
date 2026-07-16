@@ -70,7 +70,7 @@ The scratch space, and by extension the scanner object, are modified during the 
 A scanner's scan() method requires two arguments. 
    1. First, an object holding the payload for what you want to scan over. 
 The wrapper supports Strings, byte arrays, ByteBuffers (both on-heap and direct), and MemorySegments (both heap and native).
-   2. Second, an [OnMatchEventHandler](src/main/java/com/dynatrace/vectorscan4j/OnMatchEventHandler.java), which is a user-provided callback that gets executed on every match. 
+   2. Second, a [MatchHandler](src/main/java/com/dynatrace/vectorscan4j/MatchHandler.java), which is a user-provided callback that gets executed on every match. 
 Through that callback, the user can pass arbitrary logic to be executed on every match.  
 
 ## Code example
@@ -92,7 +92,7 @@ we want to count how often each pattern exists inside the input:
 
         try (Database database = new Database(exprs, ExecutionMode.BLOCK);
              BlockScanner scanner = new BlockScanner(database)) {
-             OnMatchEventHandler countMatches = (id, from, to, flags) -> {
+             MatchHandler countMatches = (id, from, to, flags) -> {
                 countsById[id]++;
                 return true;
             }; 
@@ -110,7 +110,7 @@ The list of Expression objects specify the set of patterns we want to match. Eve
 starting from 0, in the order in which they are added to the List. A Database object gets instantiated by passing it 
 the list of expressions, and specifying an execution mode. A Scanner object then references the Database 
 (BlockScanner objects for Databases with Block execution mode, and StreamScanner objects for Databases with Stream execution mode)
-For the scan method, you pass it an input, and an OnMatchEventHandler, which is a functional interface that will get executed on every match. It receives 4 arguments:
+For the scan method, you pass it an input, and a MatchHandler, which is a functional interface that will get executed on every match. It receives 4 arguments:
 
 1. The id of the expression that matched.
 2. The byte position of where the match started. Note that by default, vectorscan does not keep track of this value, unless the pattern flag SOM_LEFTMOST is enabled.
@@ -119,7 +119,7 @@ For the scan method, you pass it an input, and an OnMatchEventHandler, which is 
 The return value of the callback specifies whether you want the scanning to continue.
 Returning true will continue the scan, while returning false will stop the scanning early.
 
-In this example, the provided OnMatchEventHandler increments the value inside an integer array, and then lets the scan continue.  
+In this example, the provided MatchHandler increments the value inside an integer array, and then lets the scan continue.  
 
 ### Database Serialization/Deserialization
 
@@ -185,7 +185,7 @@ passing it a MemorySegment that points to a non-allocated region of memory might
     try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
          BlockScanner scanner = new BlockScanner(db);
          Arena arena = Arena.ofConfined()) {
-        OnMatchEventHandler doNothing = (_, _, _, _) -> true;
+        MatchHandler doNothing = (_, _, _, _) -> true;
         
         MemorySegment tiny = arena.allocate(10);
         MemorySegment larger = tiny.reinterpret(200000L);
@@ -197,15 +197,15 @@ passing it a MemorySegment that points to a non-allocated region of memory might
     }
 ```
 
-### 3. Throwing exceptions inside the OnMatchEventHandler upcall
+### 3. Throwing exceptions inside the MatchHandler upcall
 
-Throwing exceptions inside the OnMatchEventHandler will always break the JVM, i.e. you can not catch
+Throwing exceptions inside the MatchHandler will always break the JVM, i.e. you can not catch
 that exception outside the scan call:
 
 ``` java
 try (try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
      BlockScanner scanner = new BlockScanner(db)) {
-    OnMatchEventHandler throwException = (_, _, _, _) -> {
+    MatchHandler throwException = (_, _, _, _) -> {
         throw new RuntimeException("Hi, try and catch me!");
     };
     try {
@@ -263,4 +263,3 @@ The corresponding third-party notice and license reproduction is provided in:
 
 This wrapper currently supports a core subset of vectorscan's features, but not everything. 
 If additional features are required, do not hesitate to raise issues or submit pull requests directly.
-

@@ -44,7 +44,7 @@ abstract class Scanner implements AutoCloseable {
     private final Cleaner.Cleanable cleanable;
 
     static class CallHandlerOnMatch implements VectorscanMatchEventHandler.Function {
-        OnMatchEventHandler handler;
+        MatchHandler handler;
 
         @Override
         public int apply(int id, long from, long to, int flags, MemorySegment context) {
@@ -84,7 +84,7 @@ abstract class Scanner implements AutoCloseable {
         }
     }
 
-    protected void setHandler(OnMatchEventHandler handler) {
+    protected void setHandler(MatchHandler handler) {
         this.callHandler.handler = handler;
     }
 
@@ -128,14 +128,14 @@ abstract class Scanner implements AutoCloseable {
      * Scans the given input string for the patterns that were compiled in the database, emitting a
      * callback for each match.
      *
-     * <p>This is a convenience overload that delegates to {@link #scan(byte[], OnMatchEventHandler)}
+     * <p>This is a convenience overload that delegates to {@link #scan(byte[], MatchHandler)}
      * using {@link StandardCharsets#UTF_8}.
      *
      * @param input   text to scan
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
      */
-    public void scan(String input, OnMatchEventHandler handler) {
+    public void scan(String input, MatchHandler handler) {
         scan(input.getBytes(StandardCharsets.UTF_8), handler);
     }
 
@@ -152,7 +152,7 @@ abstract class Scanner implements AutoCloseable {
      * @throws IndexOutOfBoundsException if {@code offset} or {@code length} are invalid for {@code
      *                                   data}
      */
-    public void scan(byte[] data, int offset, int length, OnMatchEventHandler handler) {
+    public void scan(byte[] data, int offset, int length, MatchHandler handler) {
         scan(ByteBuffer.wrap(data, offset, length), handler);
     }
 
@@ -163,7 +163,7 @@ abstract class Scanner implements AutoCloseable {
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
      */
-    public void scan(byte[] data, OnMatchEventHandler handler) {
+    public void scan(byte[] data, MatchHandler handler) {
         scan(ByteBuffer.wrap(data), handler);
     }
 
@@ -179,7 +179,7 @@ abstract class Scanner implements AutoCloseable {
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
      */
-    public void scan(ByteBuffer buf, OnMatchEventHandler handler) {
+    public void scan(ByteBuffer buf, MatchHandler handler) {
         if (buf.isDirect()) {
             MemorySegment data = MemorySegment.ofBuffer(buf);
             scan(data, handler);
@@ -268,7 +268,7 @@ abstract class Scanner implements AutoCloseable {
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
      */
-    protected abstract void scan(MemorySegment data, OnMatchEventHandler handler);
+    protected abstract void scan(MemorySegment data, MatchHandler handler);
 
     /**
      * Implementation hook for the no-upcall native-callback path used by concrete scanner types

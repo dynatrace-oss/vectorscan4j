@@ -24,7 +24,7 @@ import com.dynatrace.vectorscan4j.constants.Flags;
  * should continue.
  */
 @FunctionalInterface
-public interface OnMatchEventHandler {
+public interface MatchHandler {
 
     /**
      * Called for every match found during a scan.

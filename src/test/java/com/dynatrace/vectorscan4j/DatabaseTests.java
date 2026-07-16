@@ -41,7 +41,7 @@ public class DatabaseTests {
             new Expression("pattern3", EnumSet.of(SOM_LEFTMOST, CASELESS)));
     static int nMatches = 0;
 
-    private final OnMatchEventHandler countMatch = (_, _, _, _) -> {
+    private final MatchHandler countMatch = (_, _, _, _) -> {
         nMatches += 1;
         return true;
     };

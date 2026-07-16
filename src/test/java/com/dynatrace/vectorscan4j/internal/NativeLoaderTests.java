@@ -26,6 +26,7 @@ class NativeLoaderTests {
     void normalizeOsMapsKnownFamilies() {
         assertEquals("windows", NativeLoader.normalizeOs("Windows 11"));
         assertEquals("linux", NativeLoader.normalizeOs("Linux"));
+        assertEquals("linux", NativeLoader.normalizeOs("Unix"));
         assertEquals("macos", NativeLoader.normalizeOs("Mac OS X"));
         assertEquals("macos", NativeLoader.normalizeOs("Darwin"));
     }

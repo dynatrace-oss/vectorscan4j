@@ -16,7 +16,7 @@
 package com.dynatrace.vectorscan4j.constants;
 
 import com.dynatrace.vectorscan4j.BlockScanner;
-import com.dynatrace.vectorscan4j.OnMatchEventHandler;
+import com.dynatrace.vectorscan4j.MatchHandler;
 import java.lang.foreign.MemorySegment;
 
 /** Pattern compilation flags for expressions. */
@@ -55,7 +55,7 @@ public enum Flags {
      * <p>This flag sets the expression's match ID to match at most once. In streaming mode, this
      * means that the expression will return only a single match over the lifetime of the stream,
      * rather than reporting every match as per standard Vectorscan semantics. In block mode, only the
-     * first match for each invocation of {@link BlockScanner#scan(MemorySegment, OnMatchEventHandler)
+     * first match for each invocation of {@link BlockScanner#scan(MemorySegment, MatchHandler)
      * BlockScanner.scan(...)} will be returned.
      *
      * <p>Note: The use of this flag in combination with {@link #SOM_LEFTMOST} is not currently

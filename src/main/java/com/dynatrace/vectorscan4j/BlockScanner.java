@@ -25,7 +25,7 @@ import java.lang.foreign.MemorySegment;
 /**
  * A {@link Scanner} that operates in block mode: each call to {@code scan(...)} processes a single,
  * self-contained input buffer in isolation. Each scan starts from the initial DFA/NFA state and ends when the entire input
- *  * has been consumed (or the {@link OnMatchEventHandler} requests early termination by returning
+ *  * has been consumed (or the {@link MatchHandler} requests early termination by returning
  *  * {@code false}).
  *
  * <p>Each scanner owns its own native scratch space and is therefore <strong>not</strong> safe to
@@ -69,7 +69,7 @@ public class BlockScanner extends Scanner {
      * @throws VectorscanException if the native scan call returns an error other than {@link
      *     com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
      */
-    public void scan(MemorySegment data, OnMatchEventHandler handler) {
+    public void scan(MemorySegment data, MatchHandler handler) {
         if (data.byteSize() > Integer.MAX_VALUE) {
             throw new IllegalArgumentException("Input MemorySegment is too big.");
         }
@@ -87,7 +87,7 @@ public class BlockScanner extends Scanner {
     /**
      * Scans {@code data} using a <em>native</em> match-event callback supplied by the caller.
      *
-     * <p>Unlike {@link #scan(MemorySegment, OnMatchEventHandler)}, this method passes the
+     * <p>Unlike {@link #scan(MemorySegment, MatchHandler)}, this method passes the
      * caller-provided native function pointer directly to vectorscan, so matches do
      * <strong>not</strong> incur an upcall back into Java. This is intended for hot paths
      * where the per-match Java callback dominates cost.
