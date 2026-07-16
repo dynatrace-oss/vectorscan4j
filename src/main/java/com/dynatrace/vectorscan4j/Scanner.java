@@ -34,6 +34,7 @@ abstract class Scanner implements AutoCloseable {
     private Arena dataArena = Arena.ofShared();
     private MemorySegment dataSegment = dataArena.allocate(bufferCapacity);
     protected final Arena arena = Arena.ofShared();
+
     protected final Database database;
     protected final MemorySegment scratch;
     private final CallHandlerOnMatch callHandler = new CallHandlerOnMatch();
@@ -188,6 +189,74 @@ abstract class Scanner implements AutoCloseable {
         }
     }
 
+    // ---------- NativeMatchHandler convenience overloads ----------
+
+    /**
+     * Scans the given input string using a <em>native</em> match-event callback.
+     *
+     * <p>This is a convenience overload that delegates to
+     * {@link #scan(byte[], NativeMatchHandler)} using {@link StandardCharsets#UTF_8}.
+     * The input is copied into the scanner's off-heap buffer before being handed to vectorscan;
+     * however, no JVM upcall happens per match, so dense-match workloads benefit substantially.
+     *
+     * @param input   text to scan
+     * @param handler native match handler; must not be {@code null}
+     * @throws IllegalArgumentException if {@code handler} is {@code null}
+     * @see #scan(MemorySegment, NativeMatchHandler)
+     */
+    public void scan(String input, NativeMatchHandler handler) {
+        scan(input.getBytes(StandardCharsets.UTF_8), handler);
+    }
+
+    /**
+     * Scans a subrange of the given byte array using a native match-event callback.
+     *
+     * @param data    input bytes
+     * @param offset  start index in {@code data}
+     * @param length  number of bytes to scan
+     * @param handler native match handler; must not be {@code null}
+     * @throws IllegalArgumentException  if {@code handler} is {@code null}
+     * @throws IndexOutOfBoundsException if {@code offset} or {@code length} are invalid for {@code data}
+     * @see #scan(MemorySegment, NativeMatchHandler)
+     */
+    public void scan(byte[] data, int offset, int length, NativeMatchHandler handler) {
+        scan(ByteBuffer.wrap(data, offset, length), handler);
+    }
+
+    /**
+     * Scans the full byte array using a native match-event callback.
+     *
+     * @param data    input bytes
+     * @param handler native match handler; must not be {@code null}
+     * @throws IllegalArgumentException if {@code handler} is {@code null}
+     * @see #scan(MemorySegment, NativeMatchHandler)
+     */
+    public void scan(byte[] data, NativeMatchHandler handler) {
+        scan(ByteBuffer.wrap(data), handler);
+    }
+
+    /**
+     * Scans the content of the provided {@link ByteBuffer} using a native match-event callback.
+     *
+     * <p>Direct buffers are scanned without copying via {@link MemorySegment#ofBuffer(java.nio.Buffer)}.
+     * Non-direct buffers are copied into the scanner's internal off-heap buffer before scanning.
+     * In both cases vectorscan invokes the supplied native callback directly with no JVM upcall.
+     *
+     * @param buf     input buffer
+     * @param handler native match handler; must not be {@code null}
+     * @throws IllegalArgumentException if {@code handler} is {@code null}
+     * @see #scan(MemorySegment, NativeMatchHandler)
+     */
+    public void scan(ByteBuffer buf, NativeMatchHandler handler) {
+        if (buf.isDirect()) {
+            MemorySegment data = MemorySegment.ofBuffer(buf);
+            scan(data, handler);
+        } else {
+            setBuffer(buf);
+            scan(dataSegment.asSlice(0, bufferLength), handler);
+        }
+    }
+
     /**
      * Implementation hook used by concrete scanner types.
      *
@@ -200,6 +269,17 @@ abstract class Scanner implements AutoCloseable {
      *                {@code false} to stop early
      */
     protected abstract void scan(MemorySegment data, OnMatchEventHandler handler);
+
+    /**
+     * Implementation hook for the no-upcall native-callback path used by concrete scanner types
+     * that support it. Implementations call into native vectorscan and pass the caller-provided
+     * native function pointer / context directly, so matches do not incur an upcall back into Java.
+     *
+     * @param data    memory region containing scan input
+     * @param handler typed wrapper around the native callback and its opaque context
+     * @throws UnsupportedOperationException if this scanner type does not support native callbacks
+     */
+    protected abstract void scan(MemorySegment data, NativeMatchHandler handler);
 
     public Database database() {
         return database;

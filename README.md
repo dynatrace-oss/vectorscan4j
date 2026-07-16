@@ -34,7 +34,7 @@ It supports the simultaneous matching of thousands of different string- and/or r
 <dependency>
   <groupId>com.dynatrace.vectorscan4j</groupId>
   <artifactId>vectorscan4j</artifactId>
-  <version>0.1.0</version>
+  <version>0.3.0</version>
 </dependency>
 ```
 
@@ -46,7 +46,7 @@ implementation "com.dynatrace.vectorscan4j:vectorscan4j:0.1.0"
 
 ### Requirements
 
-- **Java 22+** (uses the [Foreign Function & Memory API](https://docs.oracle.com/en/java/javase/25/core/foreign-function-and-memory-api.html))
+- **Java 25+** (uses the [Foreign Function & Memory API](https://docs.oracle.com/en/java/javase/25/core/foreign-function-and-memory-api.html))
 - **Linux** (x86-64 or aarch64) — native vectorscan binaries are bundled in the JAR
 
 ## Usage

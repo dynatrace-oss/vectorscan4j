@@ -39,19 +39,13 @@ import java.nio.file.Path;
  *
  * <p>This type is the project's "trust boundary" for native callbacks: the JVM cannot
  * verify the function's true ABI from its address, so callers are responsible for
- * ensuring the symbol they resolve actually matches the signature above. To make
- * accidental misuse harder, prefer obtaining instances through
- * {@link #fromLookup(SymbolLookup, String, MemorySegment)} and use the
- * version-suffixed symbol convention (e.g. {@code vs4j_on_match_v1}).
+ * ensuring the symbol they resolve actually matches the signature above.
  *
  * @param fnPtr   address of the native callback; must be a valid, non-null function pointer
  * @param context optional opaque pointer passed unchanged to the callback;
  *                use {@link MemorySegment#NULL} if not needed
  */
 public record NativeMatchHandler(MemorySegment fnPtr, MemorySegment context) {
-
-    /** Symbol-name suffix required by {@link #fromLookup(SymbolLookup, String, MemorySegment)}. */
-    public static final String REQUIRED_SUFFIX = "_v1";
 
     public NativeMatchHandler {
         if (fnPtr == null || fnPtr.equals(MemorySegment.NULL) || fnPtr.address() == 0L) {
@@ -62,21 +56,8 @@ public record NativeMatchHandler(MemorySegment fnPtr, MemorySegment context) {
         }
     }
 
-    /** Convenience: handler with no context. */
-    public static NativeMatchHandler of(MemorySegment fnPtr) {
-        return new NativeMatchHandler(fnPtr, MemorySegment.NULL);
-    }
-
-    /**
-     * Resolves {@code symbolName} from {@code lookup} and wraps it. The symbol name
-     * must end in {@link #REQUIRED_SUFFIX} as a small guard against accidentally
-     * binding to a stale/ABI-incompatible function.
-     */
+    /** Resolves {@code symbolName} from {@code lookup} and wraps it. */
     public static NativeMatchHandler fromLookup(SymbolLookup lookup, String symbolName, MemorySegment context) {
-        if (!symbolName.endsWith(REQUIRED_SUFFIX)) {
-            throw new IllegalArgumentException("Match handler symbol '" + symbolName + "' must end with '"
-                    + REQUIRED_SUFFIX + "' (versioned ABI contract).");
-        }
         MemorySegment addr = lookup.findOrThrow(symbolName);
         return new NativeMatchHandler(addr, context == null ? MemorySegment.NULL : context);
     }

@@ -102,7 +102,10 @@ public class StreamScanner extends Scanner {
      */
     public void openStream() {
         if (streamOpen) return;
-        int _ = hs_open_stream(database.dbNative, 0, streamPtr);
+        int ans = hs_open_stream(database.dbNative, 0, streamPtr);
+        if (ans != HS_SUCCESS.getCode()) {
+            throw new VectorscanException(ans);
+        }
         stream = streamPtr.getAtIndex(C_POINTER, 0);
         streamOpen = true;
     }
@@ -167,5 +170,17 @@ public class StreamScanner extends Scanner {
      */
     public boolean isStreamOpen() {
         return streamOpen;
+    }
+
+    /**
+     * Not supported on {@link StreamScanner}. Native match-event callbacks are currently only
+     * available on {@link BlockScanner}.
+     *
+     * @throws UnsupportedOperationException always
+     */
+    @Override
+    protected void scan(MemorySegment data, NativeMatchHandler handler) {
+        throw new UnsupportedOperationException("StreamScanner does not yet support native match-event callbacks; "
+                + "use BlockScanner for the no-upcall scan path.");
     }
 }

@@ -73,7 +73,7 @@ public class FastScanCallsBenchmark {
 
             String payload = "z".repeat(inputSize - 1);
             payload += inputHasMatches ? "a" : "z";
-            byte[] inputBytes = payload.getBytes(StandardCharsets.US_ASCII);
+            byte[] inputBytes = payload.getBytes(StandardCharsets.UTF_8);
             input = inputBufferIsDirect
                     ? ByteBuffer.allocateDirect(inputBytes.length)
                     : ByteBuffer.allocate(inputBytes.length);

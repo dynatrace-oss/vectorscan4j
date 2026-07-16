@@ -30,7 +30,7 @@ extern "C" {
  *
  * Returns 0 to continue scanning (this implementation never terminates early).
  */
-int vs4j_count_matches_v1(unsigned int id,
+int vs4j_count_matches(unsigned int id,
                           unsigned long long from,
                           unsigned long long to,
                           unsigned int flags,
