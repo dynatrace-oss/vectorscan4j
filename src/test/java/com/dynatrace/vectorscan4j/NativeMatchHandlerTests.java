@@ -16,6 +16,7 @@
 package com.dynatrace.vectorscan4j;
 
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.BLOCK_MODE;
+import static com.dynatrace.vectorscan4j.constants.ExecutionMode.STREAM_MODE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -35,9 +36,9 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 /**
- * Tests for {@link NativeMatchHandler} and the {@link BlockScanner#scan(MemorySegment,
- * NativeMatchHandler)} overload. Tests that require the test-only native callback library are
- * auto-skipped when it has not been built (via {@code buildTestNativeCallback}).
+ * Tests for {@link NativeMatchHandler} and the native-callback scan overloads on
+ * {@link BlockScanner} / {@link StreamScanner}. Tests that require the test-only native callback
+ * library are auto-skipped when it has not been built (via {@code buildTestNativeCallback}).
  */
 public class NativeMatchHandlerTests {
     private static Path requireNativeCallbackLibrary() {
@@ -115,10 +116,7 @@ public class NativeMatchHandlerTests {
             ctx.set(ValueLayout.JAVA_LONG, 0L, 0L);
 
             NativeMatchHandler handler = NativeMatchHandler.fromLibrary(libPath, "vs4j_count_matches", ctx, arena);
-
-            MemorySegment data = arena.allocate(input.length);
-            MemorySegment.copy(input, 0, data, ValueLayout.JAVA_BYTE, 0, input.length);
-            scanner.scan(data, handler);
+            scanner.scan(input, handler);
 
             long nativeCount = ctx.get(ValueLayout.JAVA_LONG, 0L);
             assertTrue(javaCount[0] > 0, "expected at least one match");
@@ -210,16 +208,34 @@ public class NativeMatchHandlerTests {
     }
 
     @Test
-    void streamScannerRejectsNativeHandler() {
-        try (Database db = new Database(
-                        List.of(new Expression("foo")),
-                        com.dynatrace.vectorscan4j.constants.ExecutionMode.STREAM_MODE);
+    void streamScannerNativeCallbackCountsSameAsJavaCallback() {
+        Path libPath = requireNativeCallbackLibrary();
+        List<Expression> exprs = List.of(new Expression("pattern1"));
+        try (Database db = new Database(exprs, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db);
                 Arena arena = Arena.ofConfined()) {
-            MemorySegment data = arena.allocateFrom("foo");
-            MemorySegment sentinel = MemorySegment.ofAddress(0xDEADBEEFL);
-            NativeMatchHandler handler = new NativeMatchHandler(sentinel, MemorySegment.NULL);
-            assertThrows(UnsupportedOperationException.class, () -> scanner.scan(data, handler));
+            // Java callback baseline over two chunks (first match spans chunk boundary).
+            long[] javaCount = {0};
+            scanner.scan("this ends with patt", (_, _, _, _) -> {
+                javaCount[0]++;
+                return true;
+            });
+            scanner.scan("ern1 and pattern1 again", (_, _, _, _) -> {
+                javaCount[0]++;
+                return true;
+            });
+            assertEquals(2L, javaCount[0]);
+
+            // Native callback path over the same chunks.
+            scanner.resetStream((_, _, _, _) -> true);
+            MemorySegment ctx = arena.allocate(ValueLayout.JAVA_LONG);
+            ctx.set(ValueLayout.JAVA_LONG, 0L, 0L);
+            NativeMatchHandler handler = NativeMatchHandler.fromLibrary(libPath, "vs4j_count_matches", ctx, arena);
+            scanner.scan("this ends with patt", handler);
+            scanner.scan("ern1 and pattern1 again", handler);
+
+            long nativeCount = ctx.get(ValueLayout.JAVA_LONG, 0L);
+            assertEquals(javaCount[0], nativeCount, "native stream callback must observe same matches as Java");
         }
     }
 }

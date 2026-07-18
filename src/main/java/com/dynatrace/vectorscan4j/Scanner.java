@@ -189,6 +189,19 @@ abstract class Scanner implements AutoCloseable {
         }
     }
 
+    /**
+     * Implementation hook used by concrete scanner types.
+     *
+     * <p>The given {@code data} contains exactly {@code length} bytes that should be scanned against
+     * this scanner's compiled database. Implementations call into native vectorscan and forward match
+     * callbacks to {@code handler}.
+     *
+     * @param data    memory region containing scan input
+     * @param handler callback invoked for each match; return {@code true} to continue scanning,
+     *                {@code false} to stop early
+     */
+    protected abstract void scan(MemorySegment data, MatchHandler handler);
+
     // ---------- NativeMatchHandler convenience overloads ----------
 
     /**
@@ -256,19 +269,6 @@ abstract class Scanner implements AutoCloseable {
             scan(dataSegment.asSlice(0, bufferLength), handler);
         }
     }
-
-    /**
-     * Implementation hook used by concrete scanner types.
-     *
-     * <p>The given {@code data} contains exactly {@code length} bytes that should be scanned against
-     * this scanner's compiled database. Implementations call into native vectorscan and forward match
-     * callbacks to {@code handler}.
-     *
-     * @param data    memory region containing scan input
-     * @param handler callback invoked for each match; return {@code true} to continue scanning,
-     *                {@code false} to stop early
-     */
-    protected abstract void scan(MemorySegment data, MatchHandler handler);
 
     /**
      * Implementation hook for the no-upcall native-callback path used by concrete scanner types

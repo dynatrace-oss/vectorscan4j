@@ -7,7 +7,7 @@ plugins {
 }
 
 group = "com.dynatrace.vectorscan4j"
-version = "0.2.1-SNAPSHOT"
+version = "0.3.0"
 
 repositories {
     mavenCentral()

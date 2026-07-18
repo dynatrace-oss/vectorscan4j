@@ -46,7 +46,6 @@ import java.nio.file.Path;
  *                use {@link MemorySegment#NULL} if not needed
  */
 public record NativeMatchHandler(MemorySegment fnPtr, MemorySegment context) {
-
     public NativeMatchHandler {
         if (fnPtr == null || fnPtr.equals(MemorySegment.NULL) || fnPtr.address() == 0L) {
             throw new IllegalArgumentException("fnPtr must be a non-null native function pointer");

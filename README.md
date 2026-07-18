@@ -121,6 +121,17 @@ Returning true will continue the scan, while returning false will stop the scann
 
 In this example, the provided MatchHandler increments the value inside an integer array, and then lets the scan continue.  
 
+### Native callback alternative (`NativeMatchHandler`)
+
+As an alternative to a Java-side `MatchHandler`, `BlockScanner` also supports a `NativeMatchHandler`.
+In this mode, vectorscan invokes your native callback directly, so there is no Java upcall per match.
+For high match rates, this can reduce callback overhead significantly.
+
+If you want concrete usage examples, see:
+- [`src/test/java/com/dynatrace/vectorscan4j/NativeMatchHandlerTests.java`](src/test/java/com/dynatrace/vectorscan4j/NativeMatchHandlerTests.java)
+
+Those tests show symbol lookup/loading and how to pass native callback context memory.
+ 
 ### Database Serialization/Deserialization
 
 vectorscan4j provides utility methods for serializing and deserializing a Database object:

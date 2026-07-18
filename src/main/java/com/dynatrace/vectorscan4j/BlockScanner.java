@@ -77,8 +77,8 @@ public class BlockScanner extends Scanner {
             throw new IllegalStateException("Database was already closed.");
         }
         setHandler(handler);
-        var ctx = MemorySegment.NULL;
-        int ans = hs_scan(this.database().dbNative, data, (int) data.byteSize(), 0, scratch, funcPtr, ctx);
+        int ans =
+                hs_scan(this.database().dbNative, data, (int) data.byteSize(), 0, scratch, funcPtr, MemorySegment.NULL);
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }
