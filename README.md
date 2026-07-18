@@ -41,7 +41,7 @@ It supports the simultaneous matching of thousands of different string- and/or r
 ### Gradle
 
 ```groovy
-implementation "com.dynatrace.vectorscan4j:vectorscan4j:0.1.0"
+implementation "com.dynatrace.vectorscan4j:vectorscan4j:0.3.0"
 ```
 
 ### Requirements
