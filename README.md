@@ -92,7 +92,7 @@ we want to count how often each pattern exists inside the input:
 
         try (Database database = new Database(exprs, ExecutionMode.BLOCK);
              BlockScanner scanner = new BlockScanner(database)) {
-             MatchHandler countMatches = (id, from, to, flags) -> {
+             MatchHandler countMatches = (id, from, to) -> {
                 countsById[id]++;
                 return true;
             }; 
@@ -115,7 +115,6 @@ For the scan method, you pass it an input, and a MatchHandler, which is a functi
 1. The id of the expression that matched.
 2. The byte position of where the match started. Note that by default, vectorscan does not keep track of this value, unless the pattern flag SOM_LEFTMOST is enabled.
 3. The byte position of where the match ended.
-4. The flags of the matched expression.
 The return value of the callback specifies whether you want the scanning to continue.
 Returning true will continue the scan, while returning false will stop the scanning early.
 

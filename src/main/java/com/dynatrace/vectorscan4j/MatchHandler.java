@@ -33,8 +33,7 @@ public interface MatchHandler {
      * @param from start byte offset of the match in the scanned input; this is only populated when
      *     the expression uses {@link Flags#SOM_LEFTMOST}, otherwise it is typically {@code 0}
      * @param to end byte offset of the match in the scanned input
-     * @param flags flags reported by vectorscan for this match callback
      * @return {@code true} to continue scanning, {@code false} to stop scanning early
      */
-    boolean onMatch(int id, long from, long to, int flags);
+    boolean onMatch(int id, long from, long to);
 }

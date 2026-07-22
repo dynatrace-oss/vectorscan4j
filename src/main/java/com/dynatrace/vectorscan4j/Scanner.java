@@ -48,7 +48,7 @@ abstract class Scanner implements AutoCloseable {
 
         @Override
         public int apply(int id, long from, long to, int flags, MemorySegment context) {
-            return handler.onMatch(id, from, to, flags) ? 0 : 1;
+            return handler.onMatch(id, from, to) ? 0 : 1;
         }
     }
 

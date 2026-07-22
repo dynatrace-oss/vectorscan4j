@@ -158,7 +158,7 @@ public class StreamScanner extends Scanner {
     @Override
     public void close() {
         if (streamOpen) {
-            closeStream((_, _, _, _) -> false);
+            closeStream((_, _, _) -> false);
         }
         super.close();
     }

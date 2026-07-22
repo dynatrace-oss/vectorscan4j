@@ -41,7 +41,7 @@ public class DatabaseTests {
             new Expression("pattern3", EnumSet.of(SOM_LEFTMOST, CASELESS)));
     static int nMatches = 0;
 
-    private final MatchHandler countMatch = (_, _, _, _) -> {
+    private final MatchHandler countMatch = (_, _, _) -> {
         nMatches += 1;
         return true;
     };
@@ -283,13 +283,13 @@ public class DatabaseTests {
             String input = "We have pat1 and pat2 in this string";
 
             List<Integer> beforeMatches = new ArrayList<>();
-            scannerBefore.scan(input, (id, _, _, _) -> {
+            scannerBefore.scan(input, (id, _, _) -> {
                 beforeMatches.add(id);
                 return true;
             });
 
             List<Integer> afterMatches = new ArrayList<>();
-            scannerAfter.scan(input, (id, _, _, _) -> {
+            scannerAfter.scan(input, (id, _, _) -> {
                 afterMatches.add(id);
                 return true;
             });
@@ -353,7 +353,7 @@ public class DatabaseTests {
                 int finalI = i;
                 Future<List<Integer>> f = pool.submit(() -> {
                     List<Integer> matchedIds = new ArrayList<>();
-                    scanners.get(finalI).scan(input, (id, _, _, _) -> {
+                    scanners.get(finalI).scan(input, (id, _, _) -> {
                         try {
                             allMatched.await(); // all scanners wait for each other to find a match until they continue.
                             matchedIds.add(id);

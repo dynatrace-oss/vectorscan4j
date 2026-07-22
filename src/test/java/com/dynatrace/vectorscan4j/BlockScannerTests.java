@@ -40,7 +40,7 @@ public class BlockScannerTests {
             new Expression("pattern3", EnumSet.of(SOM_LEFTMOST, CASELESS)));
     static int nMatches = 0;
 
-    final MatchHandler doNothing = (_, _, _, _) -> true;
+    final MatchHandler doNothing = (_, _, _) -> true;
 
     @Test
     void databaseWrongMode() {
@@ -56,7 +56,7 @@ public class BlockScannerTests {
             String input = "I am searching for pattern1, has anyone seen pattern1?";
             List<Integer> matchedIds = new ArrayList<>();
 
-            scanner.scan(input, (id, _, _, _) -> {
+            scanner.scan(input, (id, _, _) -> {
                 matchedIds.add(id);
                 return true;
             });
@@ -69,7 +69,7 @@ public class BlockScannerTests {
     @Test
     void earlyStopScan() {
         // if a MatchHandler returns false, the execution of the engine stops early.
-        MatchHandler incrementAndStop = (_, _, _, _) -> {
+        MatchHandler incrementAndStop = (_, _, _) -> {
             nMatches += 1;
             return false;
         };
@@ -105,7 +105,7 @@ public class BlockScannerTests {
         try (Database db = new Database(expressions, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             List<Integer> matchedIds = new ArrayList<>();
-            scanner.scan("this input contains nothing of interest", (id, _, _, _) -> {
+            scanner.scan("this input contains nothing of interest", (id, _, _) -> {
                 matchedIds.add(id);
                 return true;
             });
@@ -118,7 +118,7 @@ public class BlockScannerTests {
         try (Database db = new Database(expressions, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             List<Integer> matchedIds = new ArrayList<>();
-            MatchHandler collect = (id, _, _, _) -> {
+            MatchHandler collect = (id, _, _) -> {
                 matchedIds.add(id);
                 return true;
             };
@@ -155,7 +155,7 @@ public class BlockScannerTests {
             direct.flip(); // position=0, limit=bytes.length
 
             List<Integer> matchedIds = new ArrayList<>();
-            scanner.scan(direct, (id, _, _, _) -> {
+            scanner.scan(direct, (id, _, _) -> {
                 matchedIds.add(id);
                 return true;
             });
@@ -170,7 +170,7 @@ public class BlockScannerTests {
                 BlockScanner scanner = new BlockScanner(db)) {
             ByteBuffer buf = ByteBuffer.wrap("pattern1__pattern1__pattern1".getBytes(StandardCharsets.UTF_8));
             List<Integer> matchedIds = new ArrayList<>();
-            MatchHandler collect = (id, _, _, _) -> {
+            MatchHandler collect = (id, _, _) -> {
                 matchedIds.add(id);
                 return true;
             };
@@ -196,7 +196,7 @@ public class BlockScannerTests {
             byte[] data = "found pattern1 twice: pattern1".getBytes(StandardCharsets.UTF_8);
 
             List<Integer> matchedIds = new ArrayList<>();
-            scanner.scan(data, (id, _, _, _) -> {
+            scanner.scan(data, (id, _, _) -> {
                 matchedIds.add(id);
                 return true;
             });
@@ -212,7 +212,7 @@ public class BlockScannerTests {
             // large input triggers internal buffer reallocation
             byte[] bigData = ("pattern1" + "x".repeat(1024 * 1024 * 10)).getBytes(StandardCharsets.UTF_8);
             List<Integer> bigMatches = new ArrayList<>();
-            scanner.scan(bigData, (id, _, _, _) -> {
+            scanner.scan(bigData, (id, _, _) -> {
                 bigMatches.add(id);
                 return true;
             });
@@ -220,7 +220,7 @@ public class BlockScannerTests {
 
             // scanner must still produce correct results after the buffer was resized
             List<Integer> smallMatches = new ArrayList<>();
-            scanner.scan("pattern1", (id, _, _, _) -> {
+            scanner.scan("pattern1", (id, _, _) -> {
                 smallMatches.add(id);
                 return true;
             });
@@ -234,7 +234,7 @@ public class BlockScannerTests {
         try (Database db = new Database(exprs, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             List<Integer> matchedIds = new ArrayList<>();
-            scanner.scan("foo bar baz", (id, _, _, _) -> {
+            scanner.scan("foo bar baz", (id, _, _) -> {
                 matchedIds.add(id);
                 return true;
             });
@@ -254,7 +254,7 @@ public class BlockScannerTests {
 
         try (Database database = new Database(exprs, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(database)) {
-            scanner.scan(input, (id, _, _, _) -> {
+            scanner.scan(input, (id, _, _) -> {
                 countsById[id]++;
                 return true;
             });
@@ -281,7 +281,7 @@ public class BlockScannerTests {
                 final int start = i * sectionSize;
                 final int len = (i == nCores - 1) ? fileBytes.length - start : sectionSize;
                 int[] count = {0};
-                scanner.scan(fileBytes, start, len, (_, _, _, _) -> {
+                scanner.scan(fileBytes, start, len, (_, _, _) -> {
                     count[0]++;
                     return true;
                 });
@@ -300,7 +300,7 @@ public class BlockScannerTests {
             final int len = (i == nCores - 1) ? fileBytes.length - start : sectionSize;
             futures.add(pool.submit(() -> {
                 try (BlockScanner scanner = new BlockScanner(db)) {
-                    scanner.scan(fileBytes, start, len, (id, _, _, _) -> {
+                    scanner.scan(fileBytes, start, len, (id, _, _) -> {
                         parallelMatches.add(id);
                         return true;
                     });
@@ -446,7 +446,7 @@ public class BlockScannerTests {
         try {
             CountDownLatch stop = new CountDownLatch(1);
             CountDownLatch scannerInUse = new CountDownLatch(1);
-            MatchHandler handler = (_, _, _, _) -> {
+            MatchHandler handler = (_, _, _) -> {
                 try {
                     scannerInUse.countDown();
                     stop.await();
@@ -477,7 +477,7 @@ public class BlockScannerTests {
                 List<Integer> scanner1Matches = Collections.synchronizedList(new ArrayList<>());
                 List<Integer> scanner2Matches = Collections.synchronizedList(new ArrayList<>());
 
-                MatchHandler handler1 = (id, _, _, _) -> {
+                MatchHandler handler1 = (id, _, _) -> {
                     scanner1Matches.add(id);
                     handlersEntered.countDown();
                     try {
@@ -488,7 +488,7 @@ public class BlockScannerTests {
                     }
                     return true;
                 };
-                MatchHandler handler2 = (id, _, _, _) -> {
+                MatchHandler handler2 = (id, _, _) -> {
                     scanner2Matches.add(id);
                     handlersEntered.countDown();
                     try {

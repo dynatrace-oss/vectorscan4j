@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
 
 public class RegexFeaturesTests {
     static int nMatches = 0;
-    static final MatchHandler countMatch = (_, _, _, _) -> {
+    static final MatchHandler countMatch = (_, _, _) -> {
         nMatches += 1;
         return true;
     };

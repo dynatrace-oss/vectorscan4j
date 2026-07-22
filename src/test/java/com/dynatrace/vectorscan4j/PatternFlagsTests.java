@@ -31,7 +31,7 @@ public class PatternFlagsTests {
 
     private static List<Integer> matchIds(BlockScanner scanner, String input) {
         List<Integer> ids = new ArrayList<>();
-        scanner.scan(input, (id, _, _, _) -> {
+        scanner.scan(input, (id, _, _) -> {
             ids.add(id);
             return true;
         });
@@ -40,7 +40,7 @@ public class PatternFlagsTests {
 
     private static List<Integer> matchIds(BlockScanner scanner, byte[] input) {
         List<Integer> ids = new ArrayList<>();
-        scanner.scan(input, (id, _, _, _) -> {
+        scanner.scan(input, (id, _, _) -> {
             ids.add(id);
             return true;
         });
@@ -264,7 +264,7 @@ public class PatternFlagsTests {
         // By default, vectorscan does not keep track of the starting offset of a match - instead it reports 0.
         try (Database dbWithout = new Database(List.of(new Expression("hello")), BLOCK_MODE);
                 BlockScanner without = new BlockScanner(dbWithout)) {
-            without.scan("say hello!", (_, from, to, _) -> {
+            without.scan("say hello!", (_, from, to) -> {
                 assertEquals(0, from); // without SOM_LEFTMOST, "from" is always 0
                 assertEquals(9, to); // "to" is still the correct end offset
                 return true;
@@ -275,7 +275,7 @@ public class PatternFlagsTests {
         // that pattern.
         try (Database dbWith = new Database(List.of(new Expression("hello", EnumSet.of(SOM_LEFTMOST))), BLOCK_MODE);
                 BlockScanner with = new BlockScanner(dbWith)) {
-            with.scan("say hello!", (_, from, to, _) -> {
+            with.scan("say hello!", (_, from, to) -> {
                 assertEquals(4, from); // with SOM_LEFTMOST, "from" is being set correctly
                 assertEquals(9, to); // "to" is the exclusive end
                 return true;

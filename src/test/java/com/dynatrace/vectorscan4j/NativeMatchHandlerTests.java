@@ -106,7 +106,7 @@ public class NativeMatchHandlerTests {
 
             // 1) Java callback baseline
             long[] javaCount = {0};
-            scanner.scan(input, (_, _, _, _) -> {
+            scanner.scan(input, (_, _, _) -> {
                 javaCount[0]++;
                 return true;
             });
@@ -145,7 +145,7 @@ public class NativeMatchHandlerTests {
                 BlockScanner scanner = new BlockScanner(db);
                 Arena arena = Arena.ofConfined()) {
             long[] javaCount = {0};
-            scanner.scan(text, (_, _, _, _) -> {
+            scanner.scan(text, (_, _, _) -> {
                 javaCount[0]++;
                 return true;
             });
@@ -168,7 +168,7 @@ public class NativeMatchHandlerTests {
             int off = 4;
             int len = bytes.length - 8;
             long[] javaSubCount = {0};
-            scanner.scan(bytes, off, len, (_, _, _, _) -> {
+            scanner.scan(bytes, off, len, (_, _, _) -> {
                 javaSubCount[0]++;
                 return true;
             });
@@ -216,18 +216,18 @@ public class NativeMatchHandlerTests {
                 Arena arena = Arena.ofConfined()) {
             // Java callback baseline over two chunks (first match spans chunk boundary).
             long[] javaCount = {0};
-            scanner.scan("this ends with patt", (_, _, _, _) -> {
+            scanner.scan("this ends with patt", (_, _, _) -> {
                 javaCount[0]++;
                 return true;
             });
-            scanner.scan("ern1 and pattern1 again", (_, _, _, _) -> {
+            scanner.scan("ern1 and pattern1 again", (_, _, _) -> {
                 javaCount[0]++;
                 return true;
             });
             assertEquals(2L, javaCount[0]);
 
             // Native callback path over the same chunks.
-            scanner.resetStream((_, _, _, _) -> true);
+            scanner.resetStream((_, _, _) -> true);
             MemorySegment ctx = arena.allocate(ValueLayout.JAVA_LONG);
             ctx.set(ValueLayout.JAVA_LONG, 0L, 0L);
             NativeMatchHandler handler = NativeMatchHandler.fromLibrary(libPath, "vs4j_count_matches", ctx, arena);
