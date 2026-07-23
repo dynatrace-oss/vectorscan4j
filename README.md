@@ -155,14 +155,14 @@ vectorscan4j provides utility methods for serializing and deserializing a Databa
     }
 ```
 
-## Incorrect Usage Patterns
+## Suboptimal/incorrect Usage Patterns
 
-A small number of niche usage patterns can lead to undefined behavior, or break the JVM.
+A small number of niche usage patterns can lead to suboptimal memory usage, or lead to undefined behavior.
 
 ### 1. Not closing Database / Scanner objects
 
 Database- and Scanner objects both hold native memory, i.e. memory that is not managed by the JVM Runtime. Calling close() on those objects will clean the native memory 
-that they are holding. This memory will *also* be freed if one doesn't call the close() explicitly. However, in 
+that they are holding. This memory will *also* be freed if one doesn't call close() explicitly. However, in 
 that case it will only happen when the Database- or Scanner object gets garbage collected (which might be far in
 the future).
 ``` java
@@ -171,7 +171,7 @@ the future).
         // We create a new database, and don't call close() on it.
         Database db = new Database(List.of(new Expression("a")), BLOCK_MODE);
 
-        // After this function returns, db goes out of scope, and will be garbage collected.
+        // After this function returns, db goes out of scope, and will at some point be garbage collected.
         // -> Its native memory gets freed, but not immediately.
     }
 ```
@@ -190,7 +190,7 @@ For more optimal memory usage, either manually close Database and/or Scanner obj
 ### 2. Incorrect MemorySegment usage
 
 When using the overloaded Scanner.scan(MemorySegment segment, ...) method, 
-passing it a MemorySegment that points to a non-allocated region of memory might create a segmentation fault.
+passing it a MemorySegment that points to a non-allocated region of memory leads to undefined behavior, or might cause a segmentation fault.
 ``` java
     try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
          BlockScanner scanner = new BlockScanner(db);
@@ -202,7 +202,7 @@ passing it a MemorySegment that points to a non-allocated region of memory might
         
         // this scan might cause a segmentation fault, breaking the JVM.
         // If it doesn't cause a segmentation fault, it will scan over a random region of memory,
-        // causing undefined behavior.
+        // leading to undefined behavior.
         scanner.scan(larger, doNothing);
     }
 ```
@@ -213,7 +213,7 @@ Throwing exceptions inside the MatchHandler will always break the JVM, i.e. you 
 that exception outside the scan call:
 
 ``` java
-try (try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
+try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
      BlockScanner scanner = new BlockScanner(db)) {
     MatchHandler throwException = (_, _, _, _) -> {
         throw new RuntimeException("Hi, try and catch me!");
@@ -244,7 +244,7 @@ At the moment, `vectorscan4j` targets Linux only, on x86-64 and ARM-based CPUs (
 
 ### 2. Not all regex features are fully supported
  
-Vectorscan provides only partial support for the following regex concepts:
+The vectorscan engine provides only partial support for the following regex concepts:
    * Capture groups
    * Backreferences
    * Look-arounds

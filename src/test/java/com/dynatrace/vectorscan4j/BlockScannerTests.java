@@ -252,15 +252,15 @@ public class BlockScannerTests {
         String input = "foo bar foo baz Bar foo";
         int[] countsById = new int[exprs.size()];
 
-        try (Database database = new Database(exprs, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(database)) {
-            scanner.scan(input, (id, _, _) -> {
-                countsById[id]++;
-                return true;
-            });
-        }
-        int[] a = {3, 2, 0};
-        assertArrayEquals(a, countsById);
+        Database database = new Database(exprs, BLOCK_MODE);
+        BlockScanner scanner = new BlockScanner(database);
+        scanner.scan(input, (id, _, _) -> {
+            countsById[id]++;
+            return true;
+        });
+        assertArrayEquals(new int[] {3, 2, 0}, countsById);
+        database.close();
+        scanner.close();
     }
 
     @Test
@@ -454,9 +454,10 @@ public class BlockScannerTests {
                 }
                 return true;
             };
-            service.submit(() -> scanner.scan("pattern1 ", handler));
+            String input = "pattern1 ";
+            service.submit(() -> scanner.scan(input, handler));
             scannerInUse.await(); // wait until the scanner has found a match, meaning it is currently in use.
-            assertThrows(VectorscanException.class, () -> scanner.scan("pattern1 ", doNothing));
+            assertThrows(VectorscanException.class, () -> scanner.scan(input, doNothing));
             stop.countDown();
         } finally {
             service.shutdown();
