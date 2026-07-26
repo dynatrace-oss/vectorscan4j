@@ -34,14 +34,14 @@ It supports the simultaneous matching of thousands of different string- and/or r
 <dependency>
   <groupId>com.dynatrace.vectorscan4j</groupId>
   <artifactId>vectorscan4j</artifactId>
-  <version>0.3.0</version>
+  <version>0.3.1</version>
 </dependency>
 ```
 
 ### Gradle
 
 ```groovy
-implementation "com.dynatrace.vectorscan4j:vectorscan4j:0.3.0"
+implementation "com.dynatrace.vectorscan4j:vectorscan4j:0.3.1"
 ```
 
 ### Requirements
@@ -106,27 +106,27 @@ we want to count how often each pattern exists inside the input:
         // qux -> matched 0 times.
     }
 ```
-The list of Expression objects specify the set of patterns we want to match. Every one of them is assigned an id
-starting from 0, in the order in which they are added to the List. A Database object gets instantiated by passing it 
+The list of Expressions specify the set of patterns we want to match. Every one of them is assigned an id
+starting from 0, in the order in which they are added to the List. A Database object gets instantiated by passing to it 
 the list of expressions, and specifying an execution mode. A Scanner object then references the Database 
 (BlockScanner objects for Databases with Block execution mode, and StreamScanner objects for Databases with Stream execution mode)
-For the scan method, you pass it an input, and a MatchHandler, which is a functional interface that will get executed on every match. It receives 4 arguments:
+For the scan method, you pass it an input plus and a MatchHandler, which is a functional interface that will get executed on every match. It receives 3 arguments:
 
 1. The id of the expression that matched.
 2. The byte position of where the match started. Note that by default, vectorscan does not keep track of this value, unless the pattern flag SOM_LEFTMOST is enabled.
 3. The byte position of where the match ended.
-The return value of the callback specifies whether you want the scanning to continue.
+The return value of the callback specifies whether you want the scanning to continue:
 Returning true will continue the scan, while returning false will stop the scanning early.
 
 In this example, the provided MatchHandler increments the value inside an integer array, and then lets the scan continue.  
 
 ### Native callback alternative (`NativeMatchHandler`)
 
-As an alternative to a Java-side `MatchHandler`, `BlockScanner` also supports a `NativeMatchHandler`.
-In this mode, vectorscan invokes your native callback directly, so there is no Java upcall per match.
-For high match rates, this can reduce callback overhead significantly.
+As an alternative to a Java-side `MatchHandler`, `Scanner` also supports a `NativeMatchHandler`.
+In this mode, you don't provide the Scanner a Java-function
+This can siginificantly reduce callback overhead in the case where you have very high match rates.
 
-If you want concrete usage examples, see:
+For concrete usage examples, see:
 - [`src/test/java/com/dynatrace/vectorscan4j/NativeMatchHandlerTests.java`](src/test/java/com/dynatrace/vectorscan4j/NativeMatchHandlerTests.java)
 
 Those tests show symbol lookup/loading and how to pass native callback context memory.
@@ -230,7 +230,7 @@ try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
 
 This is due to how the Foreign Function & Memory API handles exceptions thrown during native upcalls back to Java code.
 
-### 4. Using the same Scanner concurrently in multiple threads
+### 4. Using the same Scanner concurrently from multiple threads
 
 A Scanner object maintains an internal scratch space, which is not safe to use from multiple threads. 
 Using the same Scanner from multiple threads will throw a VectorscanException.
