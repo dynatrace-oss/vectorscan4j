@@ -19,8 +19,12 @@ import com.dynatrace.vectorscan4j.BlockScanner;
 import com.dynatrace.vectorscan4j.MatchHandler;
 import java.lang.foreign.MemorySegment;
 
-/** Pattern compilation flags for expressions. */
-public enum Flags {
+/**
+ * Pattern flags for literal/regex expressions.
+ */
+public enum PatternFlag {
+    /* The comments below were adapted from the official Hyperscan documentation https://intel.github.io/hyperscan/dev-reference/api_constants.html */
+
     /**
      * Compile flag: Set case-insensitive matching.
      *
@@ -151,7 +155,7 @@ public enum Flags {
     QUIET(1024);
     public final int value;
 
-    Flags(int value) {
+    PatternFlag(int value) {
         this.value = value;
     }
 }

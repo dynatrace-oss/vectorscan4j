@@ -17,13 +17,13 @@ package com.dynatrace.vectorscan4j;
 
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.BLOCK_MODE;
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.STREAM_MODE;
-import static com.dynatrace.vectorscan4j.constants.Flags.CASELESS;
-import static com.dynatrace.vectorscan4j.constants.Flags.SOM_LEFTMOST;
+import static com.dynatrace.vectorscan4j.constants.PatternFlag.CASELESS;
+import static com.dynatrace.vectorscan4j.constants.PatternFlag.SOM_LEFTMOST;
 import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.dynatrace.vectorscan4j.constants.ExecutionMode;
-import com.dynatrace.vectorscan4j.constants.Flags;
+import com.dynatrace.vectorscan4j.constants.PatternFlag;
 import java.io.*;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -65,7 +65,7 @@ public class DatabaseTests {
         // invalid expressions throw an exception
         List<Expression> invalidExpr = List.of(new Expression(
                 "* is a quantifier with nothing in front of it -> should throw exception",
-                EnumSet.noneOf(Flags.class)));
+                EnumSet.noneOf(PatternFlag.class)));
         assertThrows(RuntimeException.class, () -> {
             var db = new Database(invalidExpr, BLOCK_MODE);
             db.close();
@@ -86,10 +86,10 @@ public class DatabaseTests {
     @Test
     void modifyExpressions() {
         List<Expression> expr = Arrays.asList(
-                new Expression("pat1", EnumSet.noneOf(Flags.class)),
-                new Expression("pat2", EnumSet.noneOf(Flags.class)));
+                new Expression("pat1", EnumSet.noneOf(PatternFlag.class)),
+                new Expression("pat2", EnumSet.noneOf(PatternFlag.class)));
         try (Database database = new Database(expr, ExecutionMode.BLOCK_MODE)) {
-            expr.set(0, new Expression("pat3", EnumSet.noneOf(Flags.class)));
+            expr.set(0, new Expression("pat3", EnumSet.noneOf(PatternFlag.class)));
         }
     }
 
@@ -97,8 +97,8 @@ public class DatabaseTests {
     void serializeDeserializeDatabase() {
         String input = "We have pat1 and pat2 int this input string.";
         List<Expression> expressions = List.of(
-                new Expression("pat1", EnumSet.noneOf(Flags.class)),
-                new Expression("pat2", EnumSet.noneOf(Flags.class)));
+                new Expression("pat1", EnumSet.noneOf(PatternFlag.class)),
+                new Expression("pat2", EnumSet.noneOf(PatternFlag.class)));
 
         try (Database database = new Database(expressions, ExecutionMode.BLOCK_MODE)) {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
@@ -129,8 +129,8 @@ public class DatabaseTests {
     void serializeDeserializeStreamDatabaseFromByteArr() {
         String input = "We have pat1 and pat2 int this input string.";
         List<Expression> expressions = List.of(
-                new Expression("pat1", EnumSet.noneOf(Flags.class)),
-                new Expression("pat2", EnumSet.noneOf(Flags.class)));
+                new Expression("pat1", EnumSet.noneOf(PatternFlag.class)),
+                new Expression("pat2", EnumSet.noneOf(PatternFlag.class)));
 
         try (Database database = new Database(expressions, STREAM_MODE);
                 Database roundTripDb = Database.deserialize(database.serialize())) {

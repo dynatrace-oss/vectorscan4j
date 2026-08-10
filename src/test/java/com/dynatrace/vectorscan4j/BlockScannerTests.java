@@ -16,13 +16,13 @@
 package com.dynatrace.vectorscan4j;
 
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.BLOCK_MODE;
-import static com.dynatrace.vectorscan4j.constants.Flags.CASELESS;
-import static com.dynatrace.vectorscan4j.constants.Flags.SOM_LEFTMOST;
+import static com.dynatrace.vectorscan4j.constants.PatternFlag.CASELESS;
+import static com.dynatrace.vectorscan4j.constants.PatternFlag.SOM_LEFTMOST;
 import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.dynatrace.vectorscan4j.constants.ExecutionMode;
-import com.dynatrace.vectorscan4j.constants.Flags;
+import com.dynatrace.vectorscan4j.constants.PatternFlag;
 import com.dynatrace.vectorscan4j.utils.LoadGenerator;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
@@ -247,7 +247,7 @@ public class BlockScannerTests {
     @Test
     void countLiteralPatternOccurrences() {
         List<Expression> exprs = List.of(
-                new Expression("foo"), new Expression("bar", EnumSet.of(Flags.CASELESS)), new Expression("qux"));
+                new Expression("foo"), new Expression("bar", EnumSet.of(PatternFlag.CASELESS)), new Expression("qux"));
 
         String input = "foo bar foo baz Bar foo";
         int[] countsById = new int[exprs.size()];

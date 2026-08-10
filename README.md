@@ -1,7 +1,7 @@
 # vectorscan4j
 
-vectorscan4j is a Java wrapper around the high-performance, multi-regex pattern matching engine vectorscan (https://github.com/VectorCamp/vectorscan).
-It supports the simultaneous matching of thousands of different string- and/or regex patterns on input data. Internally, it uses a Finite State machine-based execution through a hybrid DFA/NFA automaton. 
+vectorscan4j is a Java wrapper around the high-performance, multi-regex pattern matching engine [Vectorscan](https://github.com/VectorCamp/vectorscan).
+It supports the simultaneous matching of thousands of different string- and/or regex patterns on input data. Vectorscan uses a Finite State Machine-based execution through a hybrid DFA/NFA automaton. 
 
 ## Contents
 
@@ -17,13 +17,13 @@ It supports the simultaneous matching of thousands of different string- and/or r
 
 ## Features
 
-* Leverages vectorscan's optimized engine for fast, SIMD-powered multi-regex pattern matching.
+* Wraps Vectorscan's optimized engine to enable fast, SIMD-powered multi-regex pattern matching in Java.
 * Supports all common regex features. 
 * Provides additionally a wide set of different feature flags that can be set for each pattern individually (for example enabling UTF8 support, case-insensitive matching, and more).
 * Supports two different modes of execution:
-  * Block mode: Scan complete buffers in isolation ("stateless" execution).
-  * Streaming mode: Maintain the internal state across multiple scan calls (supports matches spanning chunk boundaries). Useful in a streaming/networking context, where data is split up in chunks.
-* It has a flexible callback-based match processing. The user can provide custom logic that is executed everytime a match is found (see [the code example](#code-example)). 
+  * Block mode: Scan complete input buffers in isolation (the "default" execution mode).
+  * Streaming mode: Maintains the internal state across multiple scan calls (supports matches spanning chunk boundaries). This is useful in a streaming/networking context, where data is split up in chunks.
+* It has a flexible callback-based match processing. The user can provide custom logic that is executed whenever a match is found (see [the code example](#code-example)). 
 * Uses Java's new [Foreign Function & Memory API](https://docs.oracle.com/en/java/javase/25/core/foreign-function-and-memory-api.html) for safe and efficient interoperability between JVM- and native execution. 
 
 ## Installation
@@ -47,29 +47,31 @@ implementation "com.dynatrace.vectorscan4j:vectorscan4j:0.3.1"
 ### Requirements
 
 - **Java 25+** (uses the [Foreign Function & Memory API](https://docs.oracle.com/en/java/javase/25/core/foreign-function-and-memory-api.html))
-- **Linux** (x86-64 or aarch64) — native vectorscan binaries are bundled in the JAR
+- **Linux** (x86-64 or aarch64) — native Vectorscan binaries are bundled in the JAR
 
 ## Usage
 
-The vectorscan4j usage is split up into multiple steps:
-1. **Compile a "database" from a set of literal/regex patterns:** 
-This database is an encoding of the hybrid DFA/NFA automaton that vectorscan traverses internally. 
+The usage of vectorscan4j for regex-pattern-matching is split up into multiple steps:
+1. **Compiling a "database" from a set of literal/regex patterns:** 
+Given a fixed set of literal/regex patterns, you compile a [Database](src/main/java/com/dynatrace/vectorscan4j/Database.java) object. A Database object holds an encoding of the hybrid DFA/NFA automaton that Vectorscan traverses internally. 
 For a fixed set of patterns, this compilation only needs to happen once. 
-The wrapper also provides database serialization/deserialization utilities, so it is easy to send that database over a network, or save to and load from a file.  
+The wrapper also provides database serialization/deserialization utilities, so it is easy to send/distribute that database over a network, or save to and load from a file.  
 Nevertheless, if the set of patterns changes, the database has to be recompiled from scratch. 
 We recommend measuring both the database compilation time and the final in-memory size of the compiled database for your use-case. 
 Generally speaking, the more patterns you compile and the higher their size and complexity, the higher the compilation time and memory requirements.    
-The database itself is constant and is never modified during the actual scanning, which makes it safe to use in multi-threaded applications. 
+The database itself is never modified during the actual scanning, making it safe to use from multiple threads simultaneously. 
 
-2. **Create a scanner object from the compiled database:**
-Each scanner object allocates and maintains its own scratch space, which keeps track of its internal state required for 
-the native vectorscan call. The native functions themselves are therefore completely allocation-free. 
-The scratch space, and by extension the scanner object, are modified during the scanning and are thus **not** safe to use from multiple threads.
 
-3. **Call the scanner object's scan() methods for fast, SIMD-powered scanning:**
-A scanner's scan() method requires two arguments. 
+2. **Creating a Scanner object from the compiled database:**
+Each [Scanner](src/main/java/com/dynatrace/vectorscan4j/Scanner.java) object allocates and maintains its own scratch space, which keeps track of its internal state required by 
+the native Vectorscan engine. The native functions for scanning input can thus be kept completely allocation-free. 
+The scratch space, and by extension the Scanner object, are modified during the scanning and are thus **not** safe to use from different threads simultanesouly.
+
+
+3. **Calling the Scanner object's scan() methods for fast, SIMD-powered scanning:**
+A Scanner's scan() method requires two arguments: 
    1. First, an object holding the payload for what you want to scan over. 
-The wrapper supports Strings, byte arrays, ByteBuffers (both on-heap and direct), and MemorySegments (both heap and native).
+The wrapper supports Strings, byte arrays, ByteBuffers (both on-heap and direct), and MemorySegments (both heap and native).   
    2. Second, a [MatchHandler](src/main/java/com/dynatrace/vectorscan4j/MatchHandler.java), which is a user-provided callback that gets executed on every match. 
 Through that callback, the user can pass arbitrary logic to be executed on every match.  
 
@@ -107,30 +109,27 @@ we want to count how often each pattern exists inside the input:
     }
 ```
 The list of Expressions specify the set of patterns we want to match. Every one of them is assigned an id
-starting from 0, in the order in which they are added to the List. A Database object gets instantiated by passing to it 
-the list of expressions, and specifying an execution mode. A Scanner object then references the Database 
-(BlockScanner objects for Databases with Block execution mode, and StreamScanner objects for Databases with Stream execution mode)
-For the scan method, you pass it an input plus and a MatchHandler, which is a functional interface that will get executed on every match. It receives 3 arguments:
+starting from 0, according to their position inside the List. A Database object gets instantiated by passing to it 
+those Expressions, and specifying an execution mode. A Scanner object then references the Database 
+(BlockScanner objects for Databases with Block execution mode, and StreamScanner objects for Databases with Stream execution mode).  
+For the scan method, you pass it an input plus an object implementing the MatchHandler interface. It receives 3 arguments:
 
 1. The id of the expression that matched.
-2. The byte position of where the match started. Note that by default, vectorscan does not keep track of this value, unless the pattern flag SOM_LEFTMOST is enabled.
+2. The byte position of where the match started. Note that by default, Vectorscan does not keep track of this value, unless the pattern flag SOM_LEFTMOST is enabled.
 3. The byte position of where the match ended.
 The return value of the callback specifies whether you want the scanning to continue:
-Returning true will continue the scan, while returning false will stop the scanning early.
+Returning true will continue the scan, while returning false will return immediately.
 
 In this example, the provided MatchHandler increments the value inside an integer array, and then lets the scan continue.  
 
-### Native callback alternative (`NativeMatchHandler`)
+### Native callback alternative
 
-As an alternative to a Java-side `MatchHandler`, `Scanner` also supports a `NativeMatchHandler`.
-In this mode, you don't provide the Scanner a Java-function
-This can siginificantly reduce callback overhead in the case where you have very high match rates.
+As an advanced alternative to a Java-side `MatchHandler`, vectorscan4j also supports [NativeMatchHandlers](src/main/java/com/dynatrace/vectorscan4j/NativeMatchHandler.java):
+NativeMatchHandlers point to native functions that have to first be dynamically loaded during runtime. 
+Using native callback functions as opposed to Java functions can reduces the callback overhead that accrues with every upcall from native scanning to JVM execution.
 
-For concrete usage examples, see:
-- [`src/test/java/com/dynatrace/vectorscan4j/NativeMatchHandlerTests.java`](src/test/java/com/dynatrace/vectorscan4j/NativeMatchHandlerTests.java)
+For concrete usage examples, see the [unit tests](src/test/java/com/dynatrace/vectorscan4j/NativeMatchHandlerTests.java).
 
-Those tests show symbol lookup/loading and how to pass native callback context memory.
- 
 ### Database Serialization/Deserialization
 
 vectorscan4j provides utility methods for serializing and deserializing a Database object:
@@ -190,17 +189,17 @@ For more optimal memory usage, either manually close Database and/or Scanner obj
 ### 2. Incorrect MemorySegment usage
 
 When using the overloaded Scanner.scan(MemorySegment segment, ...) method, 
-passing it a MemorySegment that points to a non-allocated region of memory leads to undefined behavior, or might cause a segmentation fault.
+passing it a MemorySegment that points to a non-allocated region of memory leads to undefined behavior, including the possibility of segmentation faults.
 ``` java
     try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
          BlockScanner scanner = new BlockScanner(db);
          Arena arena = Arena.ofConfined()) {
-        MatchHandler doNothing = (_, _, _, _) -> true;
+        MatchHandler doNothing = (id, from, to) -> true;
         
         MemorySegment tiny = arena.allocate(10);
         MemorySegment larger = tiny.reinterpret(200000L);
         
-        // this scan might cause a segmentation fault, breaking the JVM.
+        // This scan might cause a segmentation fault, breaking the JVM.
         // If it doesn't cause a segmentation fault, it will scan over a random region of memory,
         // leading to undefined behavior.
         scanner.scan(larger, doNothing);
@@ -215,7 +214,7 @@ that exception outside the scan call:
 ``` java
 try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
      BlockScanner scanner = new BlockScanner(db)) {
-    MatchHandler throwException = (_, _, _, _) -> {
+    MatchHandler throwException = (id, from, to) -> {
         throw new RuntimeException("Hi, try and catch me!");
     };
     try {
@@ -228,7 +227,7 @@ try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
 }
 ```
 
-This is due to how the Foreign Function & Memory API handles exceptions thrown during native upcalls back to Java code.
+This is due to how the JVM handles exceptions thrown during native upcalls back to Java code.
 
 ### 4. Using the same Scanner concurrently from multiple threads
 
@@ -239,12 +238,12 @@ Using the same Scanner from multiple threads will throw a VectorscanException.
 
 ### 1. Platform Support is currently Linux-Only
 
-Native vectorscan supports multiple operating systems and CPU architectures (see the [official repository](https://github.com/VectorCamp/vectorscan)).  
+Native Vectorscan supports multiple operating systems and CPU architectures (see the [official repository](https://github.com/VectorCamp/vectorscan)).  
 At the moment, `vectorscan4j` targets Linux only, on x86-64 and ARM-based CPUs (tested on Ubuntu).
 
 ### 2. Not all regex features are fully supported
  
-The vectorscan engine provides only partial support for the following regex concepts:
+The Vectorscan engine provides only partial support for the following regex concepts:
    * Capture groups
    * Backreferences
    * Look-arounds
@@ -255,11 +254,11 @@ scans may return false positives and should be followed by a secondary exact val
 
 ### 3. No support for Vector mode execution
 
-Currently, there is no support for vectorscan's Vector mode execution.
+Currently, there is no support for Vectorscan's Vector mode execution.
 
 ## Third-Party Licenses
 
-This repository bundles prebuilt native binaries for vectorscan under:
+This repository bundles prebuilt native binaries for Vectorscan under:
 
 - `src/main/resources/native/linux/x86_64/libvectorscan.so`
 - `src/main/resources/native/linux/aarch64/libvectorscan.so`
@@ -271,5 +270,5 @@ The corresponding third-party notice and license reproduction is provided in:
 
 ## Contributing
 
-This wrapper currently supports a core subset of vectorscan's features, but not everything. 
+This wrapper currently supports a core subset of Vectorscan's features, but not everything. 
 If additional features are required, do not hesitate to raise issues or submit pull requests directly.

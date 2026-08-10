@@ -15,16 +15,16 @@
 */
 package com.dynatrace.vectorscan4j;
 
-import com.dynatrace.vectorscan4j.constants.Flags;
+import com.dynatrace.vectorscan4j.constants.PatternFlag;
 import java.io.Serializable;
 import java.util.EnumSet;
 
-public record Expression(String pattern, EnumSet<Flags> flags) implements Serializable {
+public record Expression(String pattern, EnumSet<PatternFlag> flags) implements Serializable {
     public Expression(String pattern) {
-        this(pattern, EnumSet.noneOf(Flags.class));
+        this(pattern, EnumSet.noneOf(PatternFlag.class));
     }
 
-    public int valueOfFlags() {
+    int value() {
         return flags.stream().mapToInt(flag -> flag.value).sum();
     }
 }

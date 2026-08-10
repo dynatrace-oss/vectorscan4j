@@ -15,7 +15,7 @@
 */
 package com.dynatrace.vectorscan4j;
 
-import com.dynatrace.vectorscan4j.constants.Flags;
+import com.dynatrace.vectorscan4j.constants.PatternFlag;
 
 /**
  * Callback invoked by vectorscan for each reported pattern match.
@@ -31,7 +31,7 @@ public interface MatchHandler {
      *
      * @param id id of the matched expression (pattern)
      * @param from start byte offset of the match in the scanned input; this is only populated when
-     *     the expression uses {@link Flags#SOM_LEFTMOST}, otherwise it is typically {@code 0}
+     *     the expression uses {@link PatternFlag#SOM_LEFTMOST}, otherwise it is typically {@code 0}
      * @param to end byte offset of the match in the scanned input
      * @return {@code true} to continue scanning, {@code false} to stop scanning early
      */

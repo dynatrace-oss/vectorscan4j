@@ -102,7 +102,7 @@ public class Database implements AutoCloseable {
             Expression expression = expressions.get(i);
             MemorySegment pattern = arena.allocateFrom(expression.pattern());
             patterns.setAtIndex(C_POINTER, i, pattern);
-            flags.setAtIndex(C_INT, i, expression.valueOfFlags());
+            flags.setAtIndex(C_INT, i, expression.value());
             ids.setAtIndex(C_INT, i, i);
         }
         MemorySegment dbPtr = arena.allocate(C_POINTER);

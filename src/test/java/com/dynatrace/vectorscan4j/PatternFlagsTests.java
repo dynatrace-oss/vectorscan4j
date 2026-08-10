@@ -16,7 +16,7 @@
 package com.dynatrace.vectorscan4j;
 
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.BLOCK_MODE;
-import static com.dynatrace.vectorscan4j.constants.Flags.*;
+import static com.dynatrace.vectorscan4j.constants.PatternFlag.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 import java.nio.charset.StandardCharsets;

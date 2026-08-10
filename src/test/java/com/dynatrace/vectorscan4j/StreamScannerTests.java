@@ -16,8 +16,8 @@
 package com.dynatrace.vectorscan4j;
 
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.STREAM_MODE;
-import static com.dynatrace.vectorscan4j.constants.Flags.CASELESS;
-import static com.dynatrace.vectorscan4j.constants.Flags.SOM_LEFTMOST;
+import static com.dynatrace.vectorscan4j.constants.PatternFlag.CASELESS;
+import static com.dynatrace.vectorscan4j.constants.PatternFlag.SOM_LEFTMOST;
 import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 import static org.junit.jupiter.api.Assertions.*;
 
