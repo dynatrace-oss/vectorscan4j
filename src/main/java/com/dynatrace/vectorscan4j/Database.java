@@ -57,15 +57,7 @@ public class Database implements AutoCloseable {
     private final ExecutionMode mode;
     private final Cleaner.Cleanable cleanable;
 
-    private static final class CleanupState implements Runnable {
-        private final MemorySegment dbNative;
-        private final Arena arena;
-
-        private CleanupState(MemorySegment dbNative, Arena arena) {
-            this.dbNative = dbNative;
-            this.arena = arena;
-        }
-
+    private record CleanupState(MemorySegment dbNative, Arena arena) implements Runnable {
         @Override
         public void run() {
             try {

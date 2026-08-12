@@ -29,10 +29,11 @@ import java.nio.charset.StandardCharsets;
 
 abstract class Scanner implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
-    private long bufferCapacity = 0L; // initally internal buffer is empty
+    private long bufferCapacity = 0L; // initally internal buffer is empty. gets resized based on need
     private int bufferLength;
     private Arena dataArena = Arena.ofShared();
     private MemorySegment dataSegment = dataArena.allocate(bufferCapacity);
+    private ByteBuffer dataBuffer = dataSegment.asByteBuffer();
     protected final Arena arena = Arena.ofShared();
 
     protected final Database database;
@@ -63,10 +64,6 @@ abstract class Scanner implements AutoCloseable {
             this.arena = arena;
         }
 
-        private void setDataArena(Arena dataArena) {
-            this.dataArena = dataArena;
-        }
-
         @Override
         public void run() {
             try {
@@ -82,6 +79,30 @@ abstract class Scanner implements AutoCloseable {
             } catch (Throwable ignored) {
             }
         }
+    }
+
+    private void resizeBuffer(long newSize) {
+        dataArena.close();
+        dataArena = Arena.ofShared();
+        cleanupState.dataArena = dataArena;
+        dataSegment = dataArena.allocate(newSize);
+        dataBuffer = dataSegment.asByteBuffer();
+        bufferCapacity = newSize;
+    }
+
+    private void ensureBufferCapacity(long needed) {
+        if (needed > bufferCapacity) {
+            resizeBuffer(needed);
+        }
+    }
+
+    protected void setBuffer(ByteBuffer input) {
+        int length = input.remaining();
+        // if the internal direct ByteBuffer is too small to fit the whole input, allocate a bigger ByteBuffer
+        ensureBufferCapacity(length);
+        dataBuffer.clear();
+        dataBuffer.put(input);
+        bufferLength = length;
     }
 
     protected void setHandler(MatchHandler handler) {
@@ -100,28 +121,6 @@ abstract class Scanner implements AutoCloseable {
         scratch = scratchPtr.getAtIndex(C_POINTER, 0);
         this.cleanupState = new CleanupState(scratch, dataArena, arena);
         this.cleanable = CLEANER.register(this, cleanupState);
-    }
-
-    private void ensureBufferCapacity(long needed) {
-        if (needed > bufferCapacity) {
-            resizeBuffer(needed);
-        }
-    }
-
-    protected void setBuffer(ByteBuffer input) {
-        int length = input.remaining();
-        // if the internal direct ByteBuffer is too small to fit the whole input, allocate a bigger ByteBuffer
-        ensureBufferCapacity(length);
-        dataSegment.asByteBuffer().put(input);
-        bufferLength = length;
-    }
-
-    private void resizeBuffer(long newSize) {
-        dataArena.close();
-        dataArena = Arena.ofShared();
-        cleanupState.setDataArena(dataArena);
-        dataSegment = dataArena.allocate(newSize);
-        bufferCapacity = newSize;
     }
 
     /**
