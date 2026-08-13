@@ -1,5 +1,7 @@
 # vectorscan4j
 
+[![Maven Central](https://img.shields.io/maven-central/v/com.dynatrace.vectorscan4j/vectorscan4j)](https://central.sonatype.com/artifact/com.dynatrace.vectorscan4j/vectorscan4j)
+
 vectorscan4j is a Java wrapper around the high-performance, multi-regex pattern matching engine [Vectorscan](https://github.com/VectorCamp/vectorscan).
 It supports the simultaneous matching of thousands of different string- and/or regex patterns on input data. Vectorscan uses a Finite State Machine-based execution through a hybrid DFA/NFA automaton. 
 
@@ -27,8 +29,6 @@ It supports the simultaneous matching of thousands of different string- and/or r
 * Uses Java's new [Foreign Function & Memory API](https://docs.oracle.com/en/java/javase/25/core/foreign-function-and-memory-api.html) for safe and efficient interoperability between JVM- and native execution. 
 
 ## Installation
-
-[![Maven Central](https://img.shields.io/maven-central/v/com.dynatrace.vectorscan4j/vectorscan4j)](https://central.sonatype.com/artifact/com.dynatrace.vectorscan4j/vectorscan4j)
 
 Find all published versions on Maven Central:
 https://central.sonatype.com/artifact/com.dynatrace.vectorscan4j/vectorscan4j
