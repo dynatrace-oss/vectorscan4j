@@ -28,20 +28,25 @@ It supports the simultaneous matching of thousands of different string- and/or r
 
 ## Installation
 
+[![Maven Central](https://img.shields.io/maven-central/v/com.dynatrace.vectorscan4j/vectorscan4j)](https://central.sonatype.com/artifact/com.dynatrace.vectorscan4j/vectorscan4j)
+
+Find all published versions on Maven Central:
+https://central.sonatype.com/artifact/com.dynatrace.vectorscan4j/vectorscan4j
+
 ### Maven
 
 ```xml
 <dependency>
   <groupId>com.dynatrace.vectorscan4j</groupId>
   <artifactId>vectorscan4j</artifactId>
-  <version>0.3.1</version>
+  <version>{latest-vectorscan4j-version}</version> <!-- see Maven Central badge above -->
 </dependency>
 ```
 
 ### Gradle
 
-```groovy
-implementation "com.dynatrace.vectorscan4j:vectorscan4j:0.3.1"
+```groovy 
+implementation "com.dynatrace.vectorscan4j:vectorscan4j:{latest-vectorscan4j-version}" // see Maven Central badge above 
 ```
 
 ### Requirements
