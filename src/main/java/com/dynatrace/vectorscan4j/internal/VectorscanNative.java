@@ -369,4 +369,24 @@ public class VectorscanNative extends VectorscanNativeShared {
             throw new AssertionError("should not reach here", ex$);
         }
     }
+
+    private static class hs_scratch_size {
+        public static final FunctionDescriptor DESC =
+                FunctionDescriptor.of(VectorscanNative.C_INT, VectorscanNative.C_POINTER, VectorscanNative.C_POINTER);
+
+        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("hs_scratch_size");
+
+        public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
+    }
+
+    public static int hs_scratch_size(MemorySegment scratch, MemorySegment scratch_size) {
+        var mh$ = hs_scratch_size.HANDLE;
+        try {
+            return (int) mh$.invokeExact(scratch, scratch_size);
+        } catch (Error | RuntimeException ex) {
+            throw ex;
+        } catch (Throwable ex$) {
+            throw new AssertionError("should not reach here", ex$);
+        }
+    }
 }

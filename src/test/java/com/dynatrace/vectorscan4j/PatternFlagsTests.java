@@ -322,6 +322,29 @@ public class PatternFlagsTests {
     }
 
     @Test
+    void combinationsUsePrefixSemantic() {
+        // Vectorscan combination patterns use "prefix" semantics, not "whole-input" semantics:
+        // a combination matches iff there exists some index k where input[0..k] satisfies the formula.
+        // So "0 & !1" can match "foo then bar" (true on an early prefix) even though the full input later
+        // contains pattern 1 and would make "0 & !1" false at end-of-input.
+        // id=2 should match when id=0 has matched and id=1 has not matched yet.
+        List<Expression> expressions = List.of(
+                new Expression("foo", EnumSet.of(QUIET)), // id=0
+                new Expression("bar", EnumSet.of(QUIET)), // id=1
+                new Expression("0 & !1", EnumSet.of(COMBINATION)) // id=2
+                );
+
+        try (Database db = new Database(expressions, BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            // id=0 matches before id=1, so 0&!1 can become true before "bar" appears.
+            assertEquals(List.of(2), matchIds(scanner, "foo then bar"));
+
+            // id=1 matches before id=0, so !1 is already false when id=0 matches.
+            assertTrue(matchIds(scanner, "bar then foo").isEmpty());
+        }
+    }
+
+    @Test
     void quiet() {
         try (Database dbWithout = new Database(List.of(new Expression("foo")), BLOCK_MODE);
                 BlockScanner without = new BlockScanner(dbWithout)) {

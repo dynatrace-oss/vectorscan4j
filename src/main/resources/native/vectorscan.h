@@ -92,6 +92,23 @@ typedef int (HS_CDECL *match_event_handler)(
     void *context
 );
 
+/**
+ * Provides the size of the given scratch space.
+ *
+ * @param scratch
+ *      A per-thread scratch space allocated by @ref hs_alloc_scratch() or @ref
+ *      hs_clone_scratch().
+ *
+ * @param scratch_size
+ *      On success, the size of the scratch space in bytes is placed in this
+ *      parameter.
+ *
+ * @return
+ *      @ref HS_SUCCESS on success, other values on failure.
+ */
+hs_error_t HS_CDECL hs_scratch_size(const hs_scratch_t *scratch,
+                                    size_t *scratch_size);
+
 // ---------- Streaming mode operations ----------
 hs_error_t HS_CDECL hs_open_stream(
     const hs_database_t *db,

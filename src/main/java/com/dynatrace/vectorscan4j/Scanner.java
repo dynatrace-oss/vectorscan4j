@@ -16,9 +16,10 @@
 package com.dynatrace.vectorscan4j;
 
 import static com.dynatrace.vectorscan4j.constants.ErrorCode.HS_SUCCESS;
-import static com.dynatrace.vectorscan4j.internal.VectorscanNative.hs_alloc_scratch;
-import static com.dynatrace.vectorscan4j.internal.VectorscanNative.hs_free_scratch;
+import static com.dynatrace.vectorscan4j.internal.VectorscanNative.*;
+import static com.dynatrace.vectorscan4j.internal.VectorscanNativeShared.C_LONG;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNativeShared.C_POINTER;
+import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
 import com.dynatrace.vectorscan4j.internal.VectorscanMatchEventHandler;
 import java.lang.foreign.Arena;
@@ -282,6 +283,17 @@ abstract class Scanner implements AutoCloseable {
 
     public Database database() {
         return database;
+    }
+
+    public long getSize() {
+        try (Arena temp = Arena.ofConfined()) {
+            MemorySegment scratchSize = temp.allocate(C_LONG, 1);
+            int ans = hs_scratch_size(this.scratch, scratchSize);
+            if (ans != HS_SUCCESS.getCode()) {
+                throw new VectorscanException(ans);
+            }
+            return scratchSize.getAtIndex(JAVA_LONG, 0);
+        }
     }
 
     @Override
