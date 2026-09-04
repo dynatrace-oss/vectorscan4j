@@ -50,22 +50,18 @@ import java.util.List;
  */
 public class Database implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
-    private final Arena arena;
+    private volatile boolean closed = false;
     protected final MemorySegment dbNative;
     protected final int modeNative;
     protected final List<Expression> expressions;
     private final ExecutionMode mode;
     private final Cleaner.Cleanable cleanable;
 
-    private record CleanupState(MemorySegment dbNative, Arena arena) implements Runnable {
+    private record CleanupState(MemorySegment dbNative) implements Runnable {
         @Override
         public void run() {
             try {
                 int _ = hs_free_database(dbNative);
-            } catch (Throwable ignored) {
-            }
-            try {
-                arena.close();
             } catch (Throwable ignored) {
             }
         }
@@ -81,50 +77,51 @@ public class Database implements AutoCloseable {
      *     offending pattern id and vectorscan's error description)
      */
     public Database(List<Expression> expressions, ExecutionMode executionMode) {
-        this.arena = Arena.ofShared();
-        this.expressions = List.copyOf(expressions);
-        this.mode = executionMode;
-        this.modeNative = executionMode.equals(ExecutionMode.BLOCK_MODE) ? 1 : 2 + (1 << 24);
-        // allocate all required function arguments for database compilation as MemorySegments
-        int nElems = expressions.size();
-        MemorySegment patterns = arena.allocate(C_POINTER, nElems);
-        MemorySegment flags = arena.allocate(C_INT, nElems);
-        MemorySegment ids = arena.allocate(C_INT, nElems);
-        for (int i = 0; i < nElems; i++) {
-            Expression expression = expressions.get(i);
-            MemorySegment pattern = arena.allocateFrom(expression.pattern());
-            patterns.setAtIndex(C_POINTER, i, pattern);
-            flags.setAtIndex(C_INT, i, expression.value());
-            ids.setAtIndex(C_INT, i, i);
+        try (Arena temp = Arena.ofConfined()) {
+            this.expressions =
+                    List.copyOf(expressions); // copy the expressions, so they can't get changed from the outside
+            this.mode = executionMode;
+            this.modeNative = executionMode.equals(ExecutionMode.BLOCK_MODE) ? 1 : 2 + (1 << 24);
+            // allocate all required function arguments for database compilation as MemorySegments
+            int nElems = expressions.size();
+            MemorySegment patterns = temp.allocate(C_POINTER, nElems);
+            MemorySegment flags = temp.allocate(C_INT, nElems);
+            MemorySegment ids = temp.allocate(C_INT, nElems);
+            for (int i = 0; i < nElems; i++) {
+                Expression expression = expressions.get(i);
+                MemorySegment pattern = temp.allocateFrom(expression.pattern());
+                patterns.setAtIndex(C_POINTER, i, pattern);
+                flags.setAtIndex(C_INT, i, expression.value());
+                ids.setAtIndex(C_INT, i, i);
+            }
+            MemorySegment dbPtr = temp.allocate(C_POINTER);
+            MemorySegment errorPtr = temp.allocate(C_POINTER);
+
+            // compile
+            var platform = MemorySegment.NULL;
+            int ans = hs_compile_multi(patterns, flags, ids, nElems, modeNative, platform, dbPtr, errorPtr);
+            if (ans == HS_COMPILER_ERROR.getCode()) {
+                var compileError = errorPtr.getAtIndex(C_POINTER, 0);
+                int exprId = VectorscanCompileError.expression(compileError);
+                String msg = VectorscanCompileError.message(compileError).getString(0);
+                throw new RuntimeException(String.format("Unable to compile pattern with id %d: %s", exprId, msg));
+            }
+
+            // free compile error
+            int _ = hs_free_compile_error(errorPtr.getAtIndex(C_POINTER, 0));
+            this.dbNative = dbPtr.getAtIndex(C_POINTER, 0);
+
+            cleanable = CLEANER.register(this, new CleanupState(this.dbNative));
         }
-        MemorySegment dbPtr = arena.allocate(C_POINTER);
-        MemorySegment errorPtr = arena.allocate(C_POINTER);
-
-        // compile
-        var platform = MemorySegment.NULL;
-        int ans = hs_compile_multi(patterns, flags, ids, nElems, modeNative, platform, dbPtr, errorPtr);
-        if (ans == HS_COMPILER_ERROR.getCode()) {
-            var compileError = errorPtr.getAtIndex(C_POINTER, 0);
-            int exprId = VectorscanCompileError.expression(compileError);
-            String msg = VectorscanCompileError.message(compileError).getString(0);
-            throw new RuntimeException(String.format("Unable to compile pattern with id %d: %s", exprId, msg));
-        }
-
-        // free compile error
-        int _ = hs_free_compile_error(errorPtr.getAtIndex(C_POINTER, 0));
-        this.dbNative = dbPtr.getAtIndex(C_POINTER, 0);
-
-        cleanable = CLEANER.register(this, new CleanupState(this.dbNative, this.arena));
     }
 
-    private Database(Arena arena, MemorySegment dbNative, List<Expression> expressions, ExecutionMode mode) {
-        this.arena = arena;
+    private Database(MemorySegment dbNative, List<Expression> expressions, ExecutionMode mode) {
         this.dbNative = dbNative;
         this.expressions = List.copyOf(expressions);
         this.mode = mode;
         this.modeNative = mode.equals(ExecutionMode.BLOCK_MODE) ? 1 : 2 + (1 << 24);
 
-        cleanable = CLEANER.register(this, new CleanupState(this.dbNative, this.arena));
+        cleanable = CLEANER.register(this, new CleanupState(this.dbNative));
     }
 
     private byte[] serializeDbNative() {
@@ -214,19 +211,13 @@ public class Database implements AutoCloseable {
             MemorySegment dbBytesPtr = temp.allocate(dbBytes.length);
             dbBytesPtr.asByteBuffer().put(dbBytes);
 
-            Arena arena = Arena.ofShared();
-            try {
-                MemorySegment dbPtr = arena.allocate(C_POINTER);
-                int ans = hs_deserialize_database(dbBytesPtr, dbBytes.length, dbPtr);
-                if (ans != HS_SUCCESS.getCode()) {
-                    throw new VectorscanException(ans);
-                }
-                MemorySegment dbNative = dbPtr.getAtIndex(C_POINTER, 0);
-                return new Database(arena, dbNative, expressions, mode);
-            } catch (Exception e) {
-                arena.close();
-                throw e;
+            MemorySegment dbPtr = temp.allocate(C_POINTER);
+            int ans = hs_deserialize_database(dbBytesPtr, dbBytes.length, dbPtr);
+            if (ans != HS_SUCCESS.getCode()) {
+                throw new VectorscanException(ans);
             }
+            MemorySegment dbNative = dbPtr.getAtIndex(C_POINTER, 0);
+            return new Database(dbNative, expressions, mode);
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         } catch (IOException e) {
@@ -325,7 +316,7 @@ public class Database implements AutoCloseable {
      * @return {@code true} if closed, {@code false} if still usable
      */
     public boolean isClosed() {
-        return !arena.scope().isAlive();
+        return closed;
     }
 
     /**
@@ -336,6 +327,7 @@ public class Database implements AutoCloseable {
      */
     @Override
     public void close() {
+        closed = true;
         cleanable.clean();
     }
 }
