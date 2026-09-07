@@ -80,8 +80,7 @@ public class BlockScannerTests {
             scanner.scan("Here is pat1 and here is pat2!", incrementAndStop);
             assertEquals(1, nMatches);
             // With a BlockScanner, this stopping early does not influence the next scan, so the second
-            // scan
-            // would again match pat1 and then stop.
+            // scan would again match pat1 and then stop.
             scanner.scan("Here is pat1 and here is pat2!", incrementAndStop);
             assertEquals(2, nMatches);
         }

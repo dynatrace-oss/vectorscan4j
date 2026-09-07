@@ -220,14 +220,14 @@ public class StreamScannerTests {
 
             // make the fifth byte in the native scratch space non-zero -> marks the scratch space as "being currently
             // in use"
-            assertEquals((byte) 0, scanner.scratch.get(JAVA_BYTE, 4));
-            scanner.scratch.set(JAVA_BYTE, 4, (byte) 0xFF);
+            assertEquals((byte) 0, scanner.scratchNative.get(JAVA_BYTE, 4));
+            scanner.scratchNative.set(JAVA_BYTE, 4, (byte) 0xFF);
             assertThrows(VectorscanException.class, () -> scanner.scan("Hello", doNothing));
             assertThrows(VectorscanException.class, () -> scanner.closeStream(doNothing));
             assertThrows(VectorscanException.class, () -> scanner.resetStream(doNothing));
 
             // flip the 5th byte back, to make the scratch space valid again
-            scanner.scratch.set(JAVA_BYTE, 4, (byte) 0);
+            scanner.scratchNative.set(JAVA_BYTE, 4, (byte) 0);
         }
     }
 

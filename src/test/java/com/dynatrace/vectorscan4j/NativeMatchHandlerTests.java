@@ -207,6 +207,8 @@ public class NativeMatchHandlerTests {
         }
     }
 
+    long javaCount = 0;
+
     @Test
     void streamScannerNativeCallbackCountsSameAsJavaCallback() {
         Path libPath = requireNativeCallbackLibrary();
@@ -215,16 +217,13 @@ public class NativeMatchHandlerTests {
                 StreamScanner scanner = new StreamScanner(db);
                 Arena arena = Arena.ofConfined()) {
             // Java callback baseline over two chunks (first match spans chunk boundary).
-            long[] javaCount = {0};
-            scanner.scan("this ends with patt", (_, _, _) -> {
-                javaCount[0]++;
+            MatchHandler javaIncrement = (_, _, _) -> {
+                javaCount++;
                 return true;
-            });
-            scanner.scan("ern1 and pattern1 again", (_, _, _) -> {
-                javaCount[0]++;
-                return true;
-            });
-            assertEquals(2L, javaCount[0]);
+            };
+            scanner.scan("this ends with patt", javaIncrement);
+            scanner.scan("ern1 and pattern1 again", javaIncrement);
+            assertEquals(2L, javaCount);
 
             // Native callback path over the same chunks.
             scanner.resetStream((_, _, _) -> true);
@@ -235,7 +234,7 @@ public class NativeMatchHandlerTests {
             scanner.scan("ern1 and pattern1 again", handler);
 
             long nativeCount = ctx.get(ValueLayout.JAVA_LONG, 0L);
-            assertEquals(javaCount[0], nativeCount, "native stream callback must observe same matches as Java");
+            assertEquals(javaCount, nativeCount, "native stream callback must observe same matches as Java");
         }
     }
 }

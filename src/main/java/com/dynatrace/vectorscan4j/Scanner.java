@@ -28,22 +28,39 @@ import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 
+/**
+ * A Scanner object executes a vectorscan scan call on some input.
+ *
+ * <p>Each Scanner object owns its own scratch space which gets updated during a scan call, and is therefore
+ * <strong>not</strong> safe to use concurrently from multiple threads. To scan in parallel,
+ * create one {@code BlockScanner} per thread, all sharing the same {@link Database}.
+ */
 abstract class Scanner implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
-    private long bufferCapacity = 0L; // initally internal buffer is empty. gets resized based on need
-    private int bufferLength;
-    private Arena dataArena = Arena.ofShared();
-    private MemorySegment dataSegment = dataArena.allocate(bufferCapacity);
-    private ByteBuffer dataBuffer = dataSegment.asByteBuffer();
+    private ByteBuffer dataBuffer = ByteBuffer.allocateDirect(0);
     protected final Arena arena = Arena.ofShared();
 
     protected final Database database;
-    protected final MemorySegment scratch;
+    protected final MemorySegment scratchNative;
     private final CallHandlerOnMatch callHandler = new CallHandlerOnMatch();
     protected MemorySegment funcPtr = VectorscanMatchEventHandler.allocate(callHandler, arena);
 
     protected final CleanupState cleanupState;
     private final Cleaner.Cleanable cleanable;
+
+    protected Scanner(Database database) {
+        this.database = database;
+        // allocate scratch space
+        MemorySegment scratchPtr = arena.allocate(C_POINTER);
+        int ans = hs_alloc_scratch(database.dbNative, scratchPtr);
+        if (ans != HS_SUCCESS.getCode()) {
+            throw new VectorscanException(ans);
+        }
+        scratchNative = scratchPtr.getAtIndex(C_POINTER, 0);
+        // register cleaner to clean up scratch space in case the Scanner gets garbage collected
+        this.cleanupState = new CleanupState(scratchNative, arena);
+        this.cleanable = CLEANER.register(this, cleanupState);
+    }
 
     static class CallHandlerOnMatch implements VectorscanMatchEventHandler.Function {
         MatchHandler handler;
@@ -57,11 +74,9 @@ abstract class Scanner implements AutoCloseable {
     protected static final class CleanupState implements Runnable {
         private final MemorySegment scratch;
         private final Arena arena; // manages lifetime of internal scratch space.
-        private Arena dataArena; // manages lifetime of internal data segment.
 
-        private CleanupState(MemorySegment scratch, Arena dataArena, Arena arena) {
+        private CleanupState(MemorySegment scratch, Arena arena) {
             this.scratch = scratch;
-            this.dataArena = dataArena;
             this.arena = arena;
         }
 
@@ -72,28 +87,15 @@ abstract class Scanner implements AutoCloseable {
             } catch (Throwable ignored) {
             }
             try {
-                dataArena.close();
-            } catch (Throwable ignored) {
-            }
-            try {
                 arena.close();
             } catch (Throwable ignored) {
             }
         }
     }
 
-    private void resizeBuffer(long newSize) {
-        dataArena.close();
-        dataArena = Arena.ofShared();
-        cleanupState.dataArena = dataArena;
-        dataSegment = dataArena.allocate(newSize);
-        dataBuffer = dataSegment.asByteBuffer();
-        bufferCapacity = newSize;
-    }
-
-    private void ensureBufferCapacity(long needed) {
-        if (needed > bufferCapacity) {
-            resizeBuffer(needed);
+    private void ensureBufferCapacity(int needed) {
+        if (needed > dataBuffer.capacity()) {
+            dataBuffer = ByteBuffer.allocateDirect(needed);
         }
     }
 
@@ -103,25 +105,11 @@ abstract class Scanner implements AutoCloseable {
         ensureBufferCapacity(length);
         dataBuffer.clear();
         dataBuffer.put(input);
-        bufferLength = length;
+        dataBuffer.flip();
     }
 
     protected void setHandler(MatchHandler handler) {
         this.callHandler.handler = handler;
-    }
-
-    protected Scanner(Database database) {
-        this.database = database;
-
-        // allocate scratch space
-        MemorySegment scratchPtr = arena.allocate(C_POINTER);
-        int ans = hs_alloc_scratch(database.dbNative, scratchPtr);
-        if (ans != HS_SUCCESS.getCode()) {
-            throw new VectorscanException(ans);
-        }
-        scratch = scratchPtr.getAtIndex(C_POINTER, 0);
-        this.cleanupState = new CleanupState(scratch, dataArena, arena);
-        this.cleanable = CLEANER.register(this, cleanupState);
     }
 
     /**
@@ -181,11 +169,10 @@ abstract class Scanner implements AutoCloseable {
      */
     public void scan(ByteBuffer buf, MatchHandler handler) {
         if (buf.isDirect()) {
-            MemorySegment data = MemorySegment.ofBuffer(buf);
-            scan(data, handler);
+            scan(MemorySegment.ofBuffer(buf), handler);
         } else {
             setBuffer(buf);
-            scan(dataSegment.asSlice(0, bufferLength), handler);
+            scan(MemorySegment.ofBuffer(dataBuffer), handler);
         }
     }
 
@@ -262,11 +249,10 @@ abstract class Scanner implements AutoCloseable {
      */
     public void scan(ByteBuffer buf, NativeMatchHandler handler) {
         if (buf.isDirect()) {
-            MemorySegment data = MemorySegment.ofBuffer(buf);
-            scan(data, handler);
+            scan(MemorySegment.ofBuffer(buf), handler);
         } else {
             setBuffer(buf);
-            scan(dataSegment.asSlice(0, bufferLength), handler);
+            scan(MemorySegment.ofBuffer(dataBuffer), handler);
         }
     }
 
@@ -288,7 +274,7 @@ abstract class Scanner implements AutoCloseable {
     public long getSize() {
         try (Arena temp = Arena.ofConfined()) {
             MemorySegment scratchSize = temp.allocate(C_LONG, 1);
-            int ans = hs_scratch_size(this.scratch, scratchSize);
+            int ans = hs_scratch_size(this.scratchNative, scratchSize);
             if (ans != HS_SUCCESS.getCode()) {
                 throw new VectorscanException(ans);
             }

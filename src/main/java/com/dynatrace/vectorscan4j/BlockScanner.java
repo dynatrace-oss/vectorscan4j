@@ -25,13 +25,7 @@ import java.lang.foreign.MemorySegment;
 /**
  * A {@link Scanner} that operates in block mode: each call to {@code scan(...)} processes a single,
  * self-contained input buffer in isolation. Each scan starts from the initial DFA/NFA state and ends when the entire input
- *  * has been consumed (or the {@link MatchHandler} requests early termination by returning
- *  * {@code false}).
- *
- * <p>Each scanner owns its own native scratch space and is therefore <strong>not</strong> safe to
- * use concurrently from multiple threads. To scan in parallel, create one {@code BlockScanner} per
- * thread, all sharing the same {@link Database}.
- *
+ * has been consumed (or the {@link MatchHandler} requests early termination by returning {@code false}).
  */
 public class BlockScanner extends Scanner {
     /**
@@ -77,8 +71,8 @@ public class BlockScanner extends Scanner {
             throw new IllegalStateException("Database was already closed.");
         }
         setHandler(handler);
-        int ans =
-                hs_scan(this.database().dbNative, data, (int) data.byteSize(), 0, scratch, funcPtr, MemorySegment.NULL);
+        int ans = hs_scan(
+                this.database().dbNative, data, (int) data.byteSize(), 0, scratchNative, funcPtr, MemorySegment.NULL);
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }
@@ -116,7 +110,13 @@ public class BlockScanner extends Scanner {
             throw new IllegalStateException("Database was already closed.");
         }
         int ans = hs_scan(
-                this.database().dbNative, data, (int) data.byteSize(), 0, scratch, handler.fnPtr(), handler.context());
+                this.database().dbNative,
+                data,
+                (int) data.byteSize(),
+                0,
+                scratchNative,
+                handler.fnPtr(),
+                handler.context());
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }

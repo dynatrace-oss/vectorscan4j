@@ -87,7 +87,7 @@ public class StreamScanner extends Scanner {
             throw new IllegalStateException("Database was already closed.");
         }
         setHandler(handler);
-        int ans = hs_scan_stream(stream, data, (int) data.byteSize(), 0, scratch, funcPtr, MemorySegment.NULL);
+        int ans = hs_scan_stream(stream, data, (int) data.byteSize(), 0, scratchNative, funcPtr, MemorySegment.NULL);
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }
@@ -122,7 +122,7 @@ public class StreamScanner extends Scanner {
      */
     public void resetStream(MatchHandler handler) {
         setHandler(handler);
-        int ans = hs_reset_stream(stream, 0, scratch, funcPtr, MemorySegment.NULL);
+        int ans = hs_reset_stream(stream, 0, scratchNative, funcPtr, MemorySegment.NULL);
         if (ans != HS_SUCCESS.getCode()) {
             throw new VectorscanException(ans);
         }
@@ -141,7 +141,7 @@ public class StreamScanner extends Scanner {
     public void closeStream(MatchHandler handler) {
         if (!streamOpen) return;
         setHandler(handler);
-        int ans = hs_close_stream(stream, scratch, funcPtr, MemorySegment.NULL);
+        int ans = hs_close_stream(stream, scratchNative, funcPtr, MemorySegment.NULL);
         if (ans != HS_SUCCESS.getCode()) {
             throw new VectorscanException(ans);
         }
@@ -203,7 +203,8 @@ public class StreamScanner extends Scanner {
         if (database.isClosed()) {
             throw new IllegalStateException("Database was already closed.");
         }
-        int ans = hs_scan_stream(stream, data, (int) data.byteSize(), 0, scratch, handler.fnPtr(), handler.context());
+        int ans = hs_scan_stream(
+                stream, data, (int) data.byteSize(), 0, scratchNative, handler.fnPtr(), handler.context());
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }
