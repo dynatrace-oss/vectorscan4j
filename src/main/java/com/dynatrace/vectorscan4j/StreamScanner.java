@@ -39,7 +39,7 @@ import java.lang.foreign.MemorySegment;
  */
 public class StreamScanner extends Scanner {
     private final MemorySegment streamPtr;
-    private MemorySegment stream;
+    private MemorySegment streamNative;
     private boolean streamOpen = false;
 
     /**
@@ -87,7 +87,8 @@ public class StreamScanner extends Scanner {
             throw new IllegalStateException("Database was already closed.");
         }
         setHandler(handler);
-        int ans = hs_scan_stream(stream, data, (int) data.byteSize(), 0, scratchNative, funcPtr, MemorySegment.NULL);
+        int ans = hs_scan_stream(
+                streamNative, data, (int) data.byteSize(), 0, scratchNative, funcPtr, MemorySegment.NULL);
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }
@@ -106,7 +107,7 @@ public class StreamScanner extends Scanner {
         if (ans != HS_SUCCESS.getCode()) {
             throw new VectorscanException(ans);
         }
-        stream = streamPtr.getAtIndex(C_POINTER, 0);
+        streamNative = streamPtr.getAtIndex(C_POINTER, 0);
         streamOpen = true;
     }
 
@@ -122,7 +123,7 @@ public class StreamScanner extends Scanner {
      */
     public void resetStream(MatchHandler handler) {
         setHandler(handler);
-        int ans = hs_reset_stream(stream, 0, scratchNative, funcPtr, MemorySegment.NULL);
+        int ans = hs_reset_stream(streamNative, 0, scratchNative, funcPtr, MemorySegment.NULL);
         if (ans != HS_SUCCESS.getCode()) {
             throw new VectorscanException(ans);
         }
@@ -141,11 +142,11 @@ public class StreamScanner extends Scanner {
     public void closeStream(MatchHandler handler) {
         if (!streamOpen) return;
         setHandler(handler);
-        int ans = hs_close_stream(stream, scratchNative, funcPtr, MemorySegment.NULL);
+        int ans = hs_close_stream(streamNative, scratchNative, funcPtr, MemorySegment.NULL);
         if (ans != HS_SUCCESS.getCode()) {
             throw new VectorscanException(ans);
         }
-        stream = MemorySegment.NULL;
+        streamNative = MemorySegment.NULL;
         streamOpen = false;
     }
 
@@ -204,7 +205,7 @@ public class StreamScanner extends Scanner {
             throw new IllegalStateException("Database was already closed.");
         }
         int ans = hs_scan_stream(
-                stream, data, (int) data.byteSize(), 0, scratchNative, handler.fnPtr(), handler.context());
+                streamNative, data, (int) data.byteSize(), 0, scratchNative, handler.fnPtr(), handler.context());
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }

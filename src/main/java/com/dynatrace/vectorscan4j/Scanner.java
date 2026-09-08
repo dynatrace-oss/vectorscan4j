@@ -39,27 +39,24 @@ abstract class Scanner implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
     private ByteBuffer dataBuffer = ByteBuffer.allocateDirect(0);
     protected final Arena arena = Arena.ofShared();
-
-    protected final Database database;
-    protected final MemorySegment scratchNative;
     private final CallHandlerOnMatch callHandler = new CallHandlerOnMatch();
     protected MemorySegment funcPtr = VectorscanMatchEventHandler.allocate(callHandler, arena);
-
-    protected final CleanupState cleanupState;
+    protected final Database database;
+    protected final MemorySegment scratchNative;
     private final Cleaner.Cleanable cleanable;
 
     protected Scanner(Database database) {
         this.database = database;
-        // allocate scratch space
-        MemorySegment scratchPtr = arena.allocate(C_POINTER);
-        int ans = hs_alloc_scratch(database.dbNative, scratchPtr);
-        if (ans != HS_SUCCESS.getCode()) {
-            throw new VectorscanException(ans);
+        try (Arena temp = Arena.ofConfined()) {
+            MemorySegment scratchPtr = temp.allocate(C_POINTER);
+            int ans = hs_alloc_scratch(database.dbNative, scratchPtr);
+            if (ans != HS_SUCCESS.getCode()) {
+                throw new VectorscanException(ans);
+            }
+            scratchNative = scratchPtr.getAtIndex(C_POINTER, 0);
         }
-        scratchNative = scratchPtr.getAtIndex(C_POINTER, 0);
         // register cleaner to clean up scratch space in case the Scanner gets garbage collected
-        this.cleanupState = new CleanupState(scratchNative, arena);
-        this.cleanable = CLEANER.register(this, cleanupState);
+        this.cleanable = CLEANER.register(this, new CleanupState(scratchNative, arena));
     }
 
     static class CallHandlerOnMatch implements VectorscanMatchEventHandler.Function {
@@ -72,18 +69,18 @@ abstract class Scanner implements AutoCloseable {
     }
 
     protected static final class CleanupState implements Runnable {
-        private final MemorySegment scratch;
+        private final MemorySegment scratchNative;
         private final Arena arena; // manages lifetime of internal scratch space.
 
-        private CleanupState(MemorySegment scratch, Arena arena) {
-            this.scratch = scratch;
+        private CleanupState(MemorySegment scratchNative, Arena arena) {
+            this.scratchNative = scratchNative;
             this.arena = arena;
         }
 
         @Override
         public void run() {
             try {
-                hs_free_scratch(scratch);
+                hs_free_scratch(scratchNative);
             } catch (Throwable ignored) {
             }
             try {
@@ -93,16 +90,11 @@ abstract class Scanner implements AutoCloseable {
         }
     }
 
-    private void ensureBufferCapacity(int needed) {
-        if (needed > dataBuffer.capacity()) {
-            dataBuffer = ByteBuffer.allocateDirect(needed);
-        }
-    }
-
     protected void setBuffer(ByteBuffer input) {
-        int length = input.remaining();
-        // if the internal direct ByteBuffer is too small to fit the whole input, allocate a bigger ByteBuffer
-        ensureBufferCapacity(length);
+        int requiredSize = input.remaining();
+        if (requiredSize > dataBuffer.capacity()) {
+            dataBuffer = ByteBuffer.allocateDirect(requiredSize);
+        }
         dataBuffer.clear();
         dataBuffer.put(input);
         dataBuffer.flip();
@@ -271,7 +263,7 @@ abstract class Scanner implements AutoCloseable {
         return database;
     }
 
-    public long getSize() {
+    public long getScratchSize() {
         try (Arena temp = Arena.ofConfined()) {
             MemorySegment scratchSize = temp.allocate(C_LONG, 1);
             int ans = hs_scratch_size(this.scratchNative, scratchSize);
