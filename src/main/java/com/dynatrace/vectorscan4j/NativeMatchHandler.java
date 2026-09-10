@@ -45,7 +45,7 @@ import java.nio.file.Path;
  * @param context optional opaque pointer passed unchanged to the callback;
  *                use {@link MemorySegment#NULL} if not needed
  */
-public record NativeMatchHandler(MemorySegment fnPtr, MemorySegment context) {
+public record NativeMatchHandler(MemorySegment fnPtr, MemorySegment context) implements ScanHandler {
     public NativeMatchHandler {
         if (fnPtr == null || fnPtr.equals(MemorySegment.NULL) || fnPtr.address() == 0L) {
             throw new IllegalArgumentException("fnPtr must be a non-null native function pointer");

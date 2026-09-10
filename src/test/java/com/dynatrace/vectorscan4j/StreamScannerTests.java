@@ -174,7 +174,6 @@ public class StreamScannerTests {
                 Arena arena = Arena.ofConfined()) {
             MemorySegment tiny = arena.allocate(1);
             MemorySegment oversized = tiny.reinterpret((long) Integer.MAX_VALUE + 1L);
-
             assertThrows(IllegalArgumentException.class, () -> scanner.scan(oversized, doNothing));
         }
     }

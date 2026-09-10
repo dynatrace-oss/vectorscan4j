@@ -21,7 +21,8 @@ import static com.dynatrace.vectorscan4j.internal.VectorscanNativeShared.C_LONG;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNativeShared.C_POINTER;
 import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
-import com.dynatrace.vectorscan4j.internal.VectorscanMatchEventHandler;
+import com.dynatrace.vectorscan4j.internal.VectorscanBatchedMatchHandler;
+import com.dynatrace.vectorscan4j.internal.VectorscanMatchHandler;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.ref.Cleaner;
@@ -40,13 +41,19 @@ abstract class Scanner implements AutoCloseable {
     private ByteBuffer dataBuffer = ByteBuffer.allocateDirect(0);
     protected final Arena arena = Arena.ofShared();
     private final CallHandlerOnMatch callHandler = new CallHandlerOnMatch();
-    protected MemorySegment funcPtr = VectorscanMatchEventHandler.allocate(callHandler, arena);
+    private final BatchCallHandler batchCallHandler = new BatchCallHandler();
+    protected final MemorySegment funcPtr;
+    protected final MemorySegment batchFuncPtr;
     protected final Database database;
     protected final MemorySegment scratchNative;
+    protected final MemorySegment collectMatchCtx;
+    private int batchBufferCapacity = 0;
     private final Cleaner.Cleanable cleanable;
 
     protected Scanner(Database database) {
         this.database = database;
+        this.funcPtr = VectorscanMatchHandler.allocate(callHandler, arena);
+        this.batchFuncPtr = VectorscanBatchedMatchHandler.allocate(batchCallHandler, arena);
         try (Arena temp = Arena.ofConfined()) {
             MemorySegment scratchPtr = temp.allocate(C_POINTER);
             int ans = hs_alloc_scratch(database.dbNative, scratchPtr);
@@ -54,12 +61,16 @@ abstract class Scanner implements AutoCloseable {
                 throw new VectorscanException(ans);
             }
             scratchNative = scratchPtr.getAtIndex(C_POINTER, 0);
+
+            MemorySegment ctxPtr = temp.allocate(C_POINTER);
+            alloc_context(batchFuncPtr, ctxPtr);
+            collectMatchCtx = ctxPtr.getAtIndex(C_POINTER, 0);
         }
-        // register cleaner to clean up scratch space in case the Scanner gets garbage collected
-        this.cleanable = CLEANER.register(this, new CleanupState(scratchNative, arena));
+
+        this.cleanable = CLEANER.register(this, new CleanupState(scratchNative, collectMatchCtx, arena));
     }
 
-    static class CallHandlerOnMatch implements VectorscanMatchEventHandler.Function {
+    static class CallHandlerOnMatch implements VectorscanMatchHandler.Function {
         MatchHandler handler;
 
         @Override
@@ -68,12 +79,23 @@ abstract class Scanner implements AutoCloseable {
         }
     }
 
+    static class BatchCallHandler implements VectorscanBatchedMatchHandler.Function {
+        BulkMatchHandler handler;
+
+        @Override
+        public int apply(MemorySegment buffer, int count) {
+            return handler.handle(buffer, count);
+        }
+    }
+
     protected static final class CleanupState implements Runnable {
         private final MemorySegment scratchNative;
-        private final Arena arena; // manages lifetime of internal scratch space.
+        private final MemorySegment collectMatchCtx;
+        private final Arena arena;
 
-        private CleanupState(MemorySegment scratchNative, Arena arena) {
+        private CleanupState(MemorySegment scratchNative, MemorySegment collectMatchCtx, Arena arena) {
             this.scratchNative = scratchNative;
+            this.collectMatchCtx = collectMatchCtx;
             this.arena = arena;
         }
 
@@ -81,6 +103,10 @@ abstract class Scanner implements AutoCloseable {
         public void run() {
             try {
                 hs_free_scratch(scratchNative);
+            } catch (Throwable ignored) {
+            }
+            try {
+                free_context(collectMatchCtx);
             } catch (Throwable ignored) {
             }
             try {
@@ -104,19 +130,48 @@ abstract class Scanner implements AutoCloseable {
         this.callHandler.handler = handler;
     }
 
+    protected void setBulkHandler(BulkMatchHandler handler) {
+        this.batchCallHandler.handler = handler;
+        if (handler.bulkSize() > batchBufferCapacity) {
+            resize_buffer(collectMatchCtx, handler.bulkSize());
+            batchBufferCapacity = handler.bulkSize();
+        }
+    }
+
+    // --------------------------- scan function overloads ---------------------------
+
     /**
-     * Scans the given input string for the patterns that were compiled in the database, emitting a
+     * Scans the given data string for the patterns that were compiled in the database, emitting a
      * callback for each match.
      *
      * <p>This is a convenience overload that delegates to {@link #scan(byte[], MatchHandler)}
      * using {@link StandardCharsets#UTF_8}.
      *
-     * @param input   text to scan
+     * @param data   text to scan
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
      */
-    public void scan(String input, MatchHandler handler) {
-        scan(input.getBytes(StandardCharsets.UTF_8), handler);
+    public void scan(String data, ScanHandler handler) {
+        scan(data.getBytes(StandardCharsets.UTF_8), handler);
+    }
+
+    public void scan(String data, MatchHandler handler) {
+        scan(data, (ScanHandler) handler);
+    }
+
+    /**
+     * Scans the full byte array.
+     *
+     * @param data    input bytes
+     * @param handler callback invoked for each match; return {@code true} to continue scanning,
+     *                {@code false} to stop early
+     */
+    public void scan(byte[] data, ScanHandler handler) {
+        scan(ByteBuffer.wrap(data), handler);
+    }
+
+    public void scan(byte[] data, MatchHandler handler) {
+        scan(data, (ScanHandler) handler);
     }
 
     /**
@@ -132,19 +187,12 @@ abstract class Scanner implements AutoCloseable {
      * @throws IndexOutOfBoundsException if {@code offset} or {@code length} are invalid for {@code
      *                                   data}
      */
-    public void scan(byte[] data, int offset, int length, MatchHandler handler) {
+    public void scan(byte[] data, int offset, int length, ScanHandler handler) {
         scan(ByteBuffer.wrap(data, offset, length), handler);
     }
 
-    /**
-     * Scans the full byte array.
-     *
-     * @param data    input bytes
-     * @param handler callback invoked for each match; return {@code true} to continue scanning,
-     *                {@code false} to stop early
-     */
-    public void scan(byte[] data, MatchHandler handler) {
-        scan(ByteBuffer.wrap(data), handler);
+    public void scan(byte[] data, int offset, int length, MatchHandler handler) {
+        scan(data, offset, length, (ScanHandler) handler);
     }
 
     /**
@@ -159,13 +207,17 @@ abstract class Scanner implements AutoCloseable {
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
      */
-    public void scan(ByteBuffer buf, MatchHandler handler) {
+    public void scan(ByteBuffer buf, ScanHandler handler) {
         if (buf.isDirect()) {
             scan(MemorySegment.ofBuffer(buf), handler);
         } else {
             setBuffer(buf);
             scan(MemorySegment.ofBuffer(dataBuffer), handler);
         }
+    }
+
+    public void scan(ByteBuffer buf, MatchHandler handler) {
+        scan(buf, (ScanHandler) handler);
     }
 
     /**
@@ -179,89 +231,7 @@ abstract class Scanner implements AutoCloseable {
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
      */
-    protected abstract void scan(MemorySegment data, MatchHandler handler);
-
-    // ---------- NativeMatchHandler convenience overloads ----------
-
-    /**
-     * Scans the given input string using a <em>native</em> match-event callback.
-     *
-     * <p>This is a convenience overload that delegates to
-     * {@link #scan(byte[], NativeMatchHandler)} using {@link StandardCharsets#UTF_8}.
-     * The input is copied into the scanner's off-heap buffer before being handed to vectorscan;
-     * however, no JVM upcall happens per match, so dense-match workloads benefit substantially.
-     *
-     * @param input   text to scan
-     * @param handler native match handler; must not be {@code null}
-     * @throws IllegalArgumentException if {@code handler} is {@code null}
-     * @see #scan(MemorySegment, NativeMatchHandler)
-     */
-    public void scan(String input, NativeMatchHandler handler) {
-        scan(input.getBytes(StandardCharsets.UTF_8), handler);
-    }
-
-    /**
-     * Scans a subrange of the given byte array using a native match-event callback.
-     *
-     * @param data    input bytes
-     * @param offset  start index in {@code data}
-     * @param length  number of bytes to scan
-     * @param handler native match handler; must not be {@code null}
-     * @throws IllegalArgumentException  if {@code handler} is {@code null}
-     * @throws IndexOutOfBoundsException if {@code offset} or {@code length} are invalid for {@code data}
-     * @see #scan(MemorySegment, NativeMatchHandler)
-     */
-    public void scan(byte[] data, int offset, int length, NativeMatchHandler handler) {
-        scan(ByteBuffer.wrap(data, offset, length), handler);
-    }
-
-    /**
-     * Scans the full byte array using a native match-event callback.
-     *
-     * @param data    input bytes
-     * @param handler native match handler; must not be {@code null}
-     * @throws IllegalArgumentException if {@code handler} is {@code null}
-     * @see #scan(MemorySegment, NativeMatchHandler)
-     */
-    public void scan(byte[] data, NativeMatchHandler handler) {
-        scan(ByteBuffer.wrap(data), handler);
-    }
-
-    /**
-     * Scans the content of the provided {@link ByteBuffer} using a native match-event callback.
-     *
-     * <p>Direct buffers are scanned without copying via {@link MemorySegment#ofBuffer(java.nio.Buffer)}.
-     * Non-direct buffers are copied into the scanner's internal off-heap buffer before scanning.
-     * In both cases vectorscan invokes the supplied native callback directly with no JVM upcall.
-     *
-     * @param buf     input buffer
-     * @param handler native match handler; must not be {@code null}
-     * @throws IllegalArgumentException if {@code handler} is {@code null}
-     * @see #scan(MemorySegment, NativeMatchHandler)
-     */
-    public void scan(ByteBuffer buf, NativeMatchHandler handler) {
-        if (buf.isDirect()) {
-            scan(MemorySegment.ofBuffer(buf), handler);
-        } else {
-            setBuffer(buf);
-            scan(MemorySegment.ofBuffer(dataBuffer), handler);
-        }
-    }
-
-    /**
-     * Implementation hook for the no-upcall native-callback path used by concrete scanner types
-     * that support it. Implementations call into native vectorscan and pass the caller-provided
-     * native function pointer / context directly, so matches do not incur an upcall back into Java.
-     *
-     * @param data    memory region containing scan input
-     * @param handler typed wrapper around the native callback and its opaque context
-     * @throws UnsupportedOperationException if this scanner type does not support native callbacks
-     */
-    protected abstract void scan(MemorySegment data, NativeMatchHandler handler);
-
-    public Database database() {
-        return database;
-    }
+    protected abstract void scan(MemorySegment data, ScanHandler handler);
 
     public long getScratchSize() {
         try (Arena temp = Arena.ofConfined()) {

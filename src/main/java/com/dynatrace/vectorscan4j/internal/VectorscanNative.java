@@ -24,6 +24,7 @@ import java.lang.invoke.MethodHandle;
 public class VectorscanNative extends VectorscanNativeShared {
     static {
         NativeLoader.load("vectorscan");
+        NativeLoader.load("vs4j_collect_match");
     }
 
     static final SymbolLookup SYMBOL_LOOKUP =
@@ -383,6 +384,75 @@ public class VectorscanNative extends VectorscanNativeShared {
         var mh$ = hs_scratch_size.HANDLE;
         try {
             return (int) mh$.invokeExact(scratch, scratch_size);
+        } catch (Error | RuntimeException ex) {
+            throw ex;
+        } catch (Throwable ex$) {
+            throw new AssertionError("should not reach here", ex$);
+        }
+    }
+
+    // ------------------------ Batched match handling ------------------------
+
+    private static class alloc_context {
+        public static final FunctionDescriptor DESC =
+                FunctionDescriptor.ofVoid(VectorscanNative.C_POINTER, VectorscanNative.C_POINTER);
+
+        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("alloc_context");
+
+        public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
+    }
+
+    public static void alloc_context(MemorySegment java_handler, MemorySegment ctx_out) {
+        var mh$ = alloc_context.HANDLE;
+        try {
+            mh$.invokeExact(java_handler, ctx_out);
+        } catch (Error | RuntimeException ex) {
+            throw ex;
+        } catch (Throwable ex$) {
+            throw new AssertionError("should not reach here", ex$);
+        }
+    }
+
+    private static class resize_buffer {
+        public static final FunctionDescriptor DESC =
+                FunctionDescriptor.ofVoid(VectorscanNative.C_POINTER, VectorscanNative.C_INT);
+
+        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("resize_buffer");
+
+        public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
+    }
+
+    public static void resize_buffer(MemorySegment ctx, int new_batch_size) {
+        var mh$ = resize_buffer.HANDLE;
+        try {
+            mh$.invokeExact(ctx, new_batch_size);
+        } catch (Error | RuntimeException ex) {
+            throw ex;
+        } catch (Throwable ex$) {
+            throw new AssertionError("should not reach here", ex$);
+        }
+    }
+
+    private static class collect_match {
+        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("collect_match");
+    }
+
+    public static MemorySegment collect_match$address() {
+        return collect_match.ADDR;
+    }
+
+    private static class free_context {
+        public static final FunctionDescriptor DESC = FunctionDescriptor.ofVoid(VectorscanNative.C_POINTER);
+
+        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("free_context");
+
+        public static final MethodHandle HANDLE = Linker.nativeLinker().downcallHandle(ADDR, DESC);
+    }
+
+    public static void free_context(MemorySegment ctx) {
+        var mh$ = free_context.HANDLE;
+        try {
+            mh$.invokeExact(ctx);
         } catch (Error | RuntimeException ex) {
             throw ex;
         } catch (Throwable ex$) {

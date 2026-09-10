@@ -55,12 +55,10 @@ public class BlockScannerTests {
                 BlockScanner scanner = new BlockScanner(db)) {
             String input = "I am searching for pattern1, has anyone seen pattern1?";
             List<Integer> matchedIds = new ArrayList<>();
-
-            scanner.scan(input, (id, _, _) -> {
+            scanner.scan(input, (id, from, to) -> {
                 matchedIds.add(id);
                 return true;
             });
-
             // "pattern1" (id=0) appears twice in the input, no other pattern matches
             assertEquals(List.of(0, 0), matchedIds);
         }
@@ -125,7 +123,6 @@ public class BlockScannerTests {
             assertDoesNotThrow(() -> scanner.scan("", collect));
             assertDoesNotThrow(() -> scanner.scan(new byte[0], collect));
             assertDoesNotThrow(() -> scanner.scan(ByteBuffer.wrap(new byte[0]), collect));
-
             assertTrue(matchedIds.isEmpty());
         }
     }
@@ -138,7 +135,6 @@ public class BlockScannerTests {
                 Arena arena = Arena.ofConfined()) {
             MemorySegment tiny = arena.allocate(1);
             MemorySegment oversized = tiny.reinterpret((long) Integer.MAX_VALUE + 1L);
-
             assertThrows(IllegalArgumentException.class, () -> scanner.scan(oversized, doNothing));
         }
     }
@@ -313,7 +309,7 @@ public class BlockScannerTests {
     }
 
     @Test
-    void scanAfterClosingDatabase() {
+    void scanAfterClosingDatabaseThrows() {
         Database db = new Database(expressions, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);
         db.close();
@@ -321,7 +317,7 @@ public class BlockScannerTests {
     }
 
     @Test
-    void scanAfterClosingScanner() {
+    void scanAfterClosingScannerThrows() {
         try (Database db = new Database(expressions, BLOCK_MODE)) {
             BlockScanner scanner = new BlockScanner(db);
             scanner.close();
@@ -340,17 +336,7 @@ public class BlockScannerTests {
     }
 
     @Test
-    void invalidScan() {
-        try (Database db = new Database(expressions, BLOCK_MODE)) {
-            BlockScanner scanner = new BlockScanner(db);
-            scanner.close();
-            // The underlying Arena is closed; any subsequent scan must throw
-            assertThrows(Exception.class, () -> scanner.scan("pattern1", doNothing));
-        }
-    }
-
-    @Test
-    void scanClosedMemorySegment() {
+    void scanClosedMemorySegmentThrows() {
         try (Database db = new Database(expressions, BLOCK_MODE)) {
             BlockScanner scanner = new BlockScanner(db);
             Arena arena = Arena.ofConfined();
@@ -361,15 +347,19 @@ public class BlockScannerTests {
     }
 
     @Test
-    void createScannerFromInvalidDb() {
+    void createScannerFromInvalidDbThrows() {
         try (Database db = new Database(expressions, BLOCK_MODE)) {
             // flip the first byte in the native database, to make the encoded DB invalid
             byte b0 = db.dbNative.get(JAVA_BYTE, 0);
             db.dbNative.set(JAVA_BYTE, 0, (byte) (b0 ^ 0xFF));
             assertThrows(VectorscanException.class, () -> new BlockScanner(db));
 
-            // flip the first byte back, to make the encoded DB valid again (so it can close properly)
+            // flip the first byte back, and make sure it does work with the original db
             db.dbNative.set(JAVA_BYTE, 0, b0);
+            assertDoesNotThrow(() -> {
+                var s = new BlockScanner(db);
+                s.close();
+            });
         }
     }
 
@@ -382,8 +372,9 @@ public class BlockScannerTests {
             db.dbNative.set(JAVA_BYTE, 0, (byte) (b0 ^ 0xFF));
             assertThrows(VectorscanException.class, () -> scanner.scan("Hello", doNothing));
 
-            // flip the first byte back, to make the encoded DB valid again (so it can close properly)
+            // flip the first byte back, to make the encoded DB valid again and make sure the scan works again
             db.dbNative.set(JAVA_BYTE, 0, b0);
+            assertDoesNotThrow(() -> scanner.scan("Hello", doNothing));
         }
     }
 
@@ -437,7 +428,7 @@ public class BlockScannerTests {
     }
 
     @Test
-    void usingScannerFromMultipleThreadsThrowsVectorscanException() throws Exception {
+    void usingScannerFromMultipleThreadsThrows() throws Exception {
         Database db = new Database(expressions, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);
 
@@ -514,6 +505,33 @@ public class BlockScannerTests {
                 pool.shutdown();
                 assertTrue(pool.awaitTermination(1L, TimeUnit.SECONDS));
             }
+        }
+    }
+
+    static boolean sameMatches(BlockScanner s1, String input, int bulkSize) {
+        ThreadLocal<Integer> hash = new ThreadLocal<>();
+        MatchHandler hashMatch = (id, from, to) -> {
+            hash.set(hash.get() ^ Integer.valueOf(id).hashCode());
+            hash.set(hash.get() ^ Long.valueOf(from).hashCode());
+            hash.set(hash.get() ^ Long.valueOf(to).hashCode());
+            return true;
+        };
+        BulkMatchHandler bulkHashMatch = new BulkMatchHandler(bulkSize, hashMatch);
+        hash.set(0);
+        s1.scan(input, hashMatch);
+        int ans1 = hash.get();
+        hash.set(0);
+        s1.scan(input, bulkHashMatch);
+        int ans2 = hash.get();
+        return ans1 == ans2;
+    }
+
+    @Test
+    void batchedMatchHandling() {
+        try (Database db = new Database(expressions, BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            String input = "We match pattern1, pattern2 and pattern3 one time each.";
+            assertTrue(sameMatches(scanner, input, 64));
         }
     }
 }

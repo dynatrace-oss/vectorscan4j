@@ -49,6 +49,74 @@ tasks.withType(Test).configureEach {
             layout.buildDirectory.file("native/libvs4j_count_matches.so").get().asFile.absolutePath
 }
 
+// Generate Java bindings from a C/C++ header using jextract.
+// Usage: ./gradlew jextract -PinputFile=<relative-path-to-header>
+// Output is placed in the same directory as the input file.
+tasks.register('jextract') {
+    group = 'native'
+    doFirst {
+        if (!project.hasProperty('inputFile')) {
+            throw new GradleException(
+                    'No input file specified. Usage: ./gradlew jextract -PinputFile=<path>')
+        }
+        def inputFile = file(project.property('inputFile'))
+        if (!inputFile.exists()) {
+            throw new GradleException("File not found: ${inputFile.absolutePath}")
+        }
+        try {
+            new ProcessBuilder('jextract', '--version')
+                    .redirectErrorStream(true)
+                    .start()
+                    .waitFor()
+        } catch (IOException e) {
+            throw new GradleException(
+                    'jextract is not installed or not on PATH. ' +
+                    'Download it from https://jdk.java.net/jextract/')
+        }
+        def proc = new ProcessBuilder(
+                        'jextract', '--output', inputFile.parentFile.absolutePath, inputFile.absolutePath)
+                .inheritIO()
+                .start()
+        def exitCode = proc.waitFor()
+        if (exitCode != 0) {
+            throw new GradleException("jextract failed with exit code ${exitCode}")
+        }
+    }
+}
+
+// Utility task: compile collect_match.cpp and deposit the result directly into
+// src/main/resources so it is committed and bundled in the JAR automatically.
+// Run manually with ./gradlew buildCollectMatch when the C++ source changes.
+def nativeSrcDir = file("src/main/resources/native")
+def cmakeBuildDir = layout.buildDirectory.dir("cmake-native").get().asFile
+def osName = System.getProperty("os.name").toLowerCase()
+def osArch = System.getProperty("os.arch").toLowerCase()
+def osPart = osName.contains("mac") ? "osx" : osName.contains("win") ? "windows" : "linux"
+def archPart = osArch == "amd64" ? "x86_64" : osArch  // normalize amd64 → x86_64
+def nativeOutDir = file("src/main/resources/native/${osPart}/${archPart}")
+
+tasks.register('cmakeConfigure', Exec) {
+    inputs.file("${nativeSrcDir}/CMakeLists.txt")
+    inputs.file("${nativeSrcDir}/collect_match.cpp")
+    outputs.dir(cmakeBuildDir)
+    doFirst { cmakeBuildDir.mkdirs() }
+    commandLine 'cmake',
+            '-S', nativeSrcDir.absolutePath,
+            '-B', cmakeBuildDir.absolutePath,
+            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${nativeOutDir.absolutePath}",
+            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE=${nativeOutDir.absolutePath}",
+            "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${nativeOutDir.absolutePath}",
+            "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=${nativeOutDir.absolutePath}"
+}
+
+tasks.register('buildCollectMatch', Exec) {
+    dependsOn 'cmakeConfigure'
+    inputs.file("${nativeSrcDir}/collect_match.cpp")
+    outputs.dir(nativeOutDir)
+    doFirst { nativeOutDir.mkdirs() }
+    commandLine 'cmake', '--build', cmakeBuildDir.absolutePath, '--config', 'Release'
+}
+
 // Build a tiny native shared library used by tests that exercise the
 // no-upcall scan path (see NativeMatchHandler). Skipped silently if cc is missing.
 tasks.register('buildTestNativeCallback', Exec) {
@@ -84,10 +152,12 @@ tasks.named("jar") {
         into("META-INF")
     }
     exclude("native/vectorscan.h")
+    exclude("native/CMakeLists.txt")
 }
 
 tasks.named("sourcesJar") {
     exclude("native/vectorscan.h")
+    exclude("native/CMakeLists.txt")
 }
 
 publishing {

@@ -60,6 +60,27 @@ public class StreamScanner extends Scanner {
         openStream();
     }
 
+    @Override
+    public void scan(MemorySegment data, ScanHandler handler) {
+        if (!streamOpen) {
+            throw new IllegalStateException("Stream is closed. Open a new stream first.");
+        }
+        if (data.byteSize() > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Input MemorySegment is too big.");
+        }
+        if (database.isClosed()) {
+            throw new IllegalStateException("Database was already closed.");
+        }
+        if (handler == null) {
+            throw new IllegalArgumentException("handler must not be null");
+        }
+        switch (handler) {
+            case MatchHandler h -> scan(data, h);
+            case BulkMatchHandler h -> scan(data, h);
+            case NativeMatchHandler h -> scan(data, h);
+        }
+    }
+
     /**
      * Scans bytes from the provided {@link MemorySegment} without copying them into an intermediate
      * buffer.
@@ -76,19 +97,39 @@ public class StreamScanner extends Scanner {
      *     {@code false} to stop early
      * @throws VectorscanException if vectorscan reports an error other than early termination
      */
-    public void scan(MemorySegment data, MatchHandler handler) {
-        if (!streamOpen) {
-            throw new IllegalStateException("Stream is closed. Open a new stream first.");
-        }
-        if (data.byteSize() > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException("Input MemorySegment is too big.");
-        }
-        if (database.isClosed()) {
-            throw new IllegalStateException("Database was already closed.");
-        }
+    private void scan(MemorySegment data, MatchHandler handler) {
         setHandler(handler);
         int ans = hs_scan_stream(
                 streamNative, data, (int) data.byteSize(), 0, scratchNative, funcPtr, MemorySegment.NULL);
+        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
+            throw new VectorscanException(ans);
+        }
+    }
+
+    private void scan(MemorySegment data, BulkMatchHandler handler) {
+        throw new RuntimeException();
+    }
+
+    /**
+     * Scans {@code data} using a <em>native</em> match-event callback supplied by the caller.
+     *
+     * <p>Unlike {@link #scan(MemorySegment, MatchHandler)}, this method passes the caller-provided
+     * native function pointer directly to vectorscan, so matches do <strong>not</strong> incur an
+     * upcall back into Java.
+     *
+     * @param data memory region containing the bytes to scan; {@code byteSize()} must fit into a Java
+     *     {@code int}
+     * @param handler typed wrapper around the native callback and its opaque context
+     * @throws IllegalArgumentException if {@code data.byteSize()} exceeds {@link Integer#MAX_VALUE}
+     *     or {@code handler} is {@code null}
+     * @throws IllegalStateException if the underlying {@link Database} has been closed or stream is
+     *     currently closed
+     * @throws VectorscanException if the native scan call returns an error other than
+     *     {@link com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
+     */
+    private void scan(MemorySegment data, NativeMatchHandler handler) {
+        int ans = hs_scan_stream(
+                streamNative, data, (int) data.byteSize(), 0, scratchNative, handler.fnPtr(), handler.context());
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }
@@ -151,6 +192,15 @@ public class StreamScanner extends Scanner {
     }
 
     /**
+     * Returns whether the native stream is currently open.
+     *
+     * @return {@code true} if a stream is open and ready for scanning, {@code false} otherwise
+     */
+    public boolean isStreamOpen() {
+        return streamOpen;
+    }
+
+    /**
      * Closes this scanner, releasing all native resources.
      *
      * <p>If the stream is still open, it is closed first (any end-of-stream matches are discarded).
@@ -162,52 +212,5 @@ public class StreamScanner extends Scanner {
             closeStream((_, _, _) -> false);
         }
         super.close();
-    }
-
-    /**
-     * Returns whether the native stream is currently open.
-     *
-     * @return {@code true} if a stream is open and ready for scanning, {@code false} otherwise
-     */
-    public boolean isStreamOpen() {
-        return streamOpen;
-    }
-
-    /**
-     * Scans {@code data} using a <em>native</em> match-event callback supplied by the caller.
-     *
-     * <p>Unlike {@link #scan(MemorySegment, MatchHandler)}, this method passes the caller-provided
-     * native function pointer directly to vectorscan, so matches do <strong>not</strong> incur an
-     * upcall back into Java.
-     *
-     * @param data memory region containing the bytes to scan; {@code byteSize()} must fit into a Java
-     *     {@code int}
-     * @param handler typed wrapper around the native callback and its opaque context
-     * @throws IllegalArgumentException if {@code data.byteSize()} exceeds {@link Integer#MAX_VALUE}
-     *     or {@code handler} is {@code null}
-     * @throws IllegalStateException if the underlying {@link Database} has been closed or stream is
-     *     currently closed
-     * @throws VectorscanException if the native scan call returns an error other than
-     *     {@link com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
-     */
-    @Override
-    public void scan(MemorySegment data, NativeMatchHandler handler) {
-        if (handler == null) {
-            throw new IllegalArgumentException("handler must not be null");
-        }
-        if (!streamOpen) {
-            throw new IllegalStateException("Stream is closed. Open a new stream first.");
-        }
-        if (data.byteSize() > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException("Input MemorySegment is too big.");
-        }
-        if (database.isClosed()) {
-            throw new IllegalStateException("Database was already closed.");
-        }
-        int ans = hs_scan_stream(
-                streamNative, data, (int) data.byteSize(), 0, scratchNative, handler.fnPtr(), handler.context());
-        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
-            throw new VectorscanException(ans);
-        }
     }
 }
