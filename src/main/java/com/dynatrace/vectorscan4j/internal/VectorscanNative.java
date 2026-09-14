@@ -23,7 +23,7 @@ import java.lang.invoke.MethodHandle;
 
 public class VectorscanNative extends VectorscanNativeShared {
     static {
-        NativeLoader.load("vectorscan");
+        NativeLoader.load("hs", "5.4.13");
         NativeLoader.load("vs4j_collect_match");
     }
 

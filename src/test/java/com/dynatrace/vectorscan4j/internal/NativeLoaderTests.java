@@ -54,10 +54,10 @@ class NativeLoaderTests {
 
     @Test
     void buildResourcePathUsesNormalizedSegments() {
-        Path p = NativeLoader.buildResourcePath("vectorscan", "Linux", "amd64");
+        Path p = NativeLoader.buildResourcePath("vectorscan", "Linux", "amd64", "5.4.13");
         String normalized = p.toString().replace('\\', '/');
         assertTrue(normalized.startsWith("/native/linux/x86_64/"));
-        assertTrue(normalized.endsWith(System.mapLibraryName("vectorscan")));
+        assertTrue(normalized.endsWith("5.4.13"));
     }
 
     @Test
