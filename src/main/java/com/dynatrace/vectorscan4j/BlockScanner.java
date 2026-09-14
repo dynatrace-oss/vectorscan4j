@@ -19,7 +19,6 @@ import static com.dynatrace.vectorscan4j.constants.ErrorCode.HS_SCAN_TERMINATED;
 import static com.dynatrace.vectorscan4j.constants.ErrorCode.HS_SUCCESS;
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.BLOCK_MODE;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNative.*;
-import static com.dynatrace.vectorscan4j.internal.VectorscanNativeShared.C_POINTER;
 import static java.lang.foreign.ValueLayout.JAVA_INT;
 
 import java.lang.foreign.MemorySegment;
@@ -44,10 +43,7 @@ public class BlockScanner extends Scanner {
         super(db);
     }
 
-    public void scan(MemorySegment data, ScanHandler handler) {
-        if (data.byteSize() > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException("Input MemorySegment is too big.");
-        }
+    public void scan(MemorySegment dataSegment, int length, ScanHandler handler) {
         if (database.isClosed()) {
             throw new IllegalStateException("Database was already closed.");
         }
@@ -55,9 +51,9 @@ public class BlockScanner extends Scanner {
             throw new IllegalArgumentException("handler must not be null");
         }
         switch (handler) {
-            case MatchHandler h -> scan(data, h);
-            case BulkMatchHandler h -> scan(data, h);
-            case NativeMatchHandler h -> scan(data, h);
+            case MatchHandler h -> scan(dataSegment, length, h);
+            case BulkMatchHandler h -> scan(dataSegment, length, h);
+            case NativeMatchHandler h -> scan(dataSegment, length, h);
         }
     }
 
@@ -72,8 +68,6 @@ public class BlockScanner extends Scanner {
      * <p>The full range {@code [0, data.byteSize())} of the segment is scanned. To scan only a
      * sub-range, use {@link MemorySegment#asSlice(long, long)} before calling this method.
      *
-     * @param data memory region containing the bytes to scan; must have a byte size that fits into
-     *     a Java {@code int}
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *     {@code false} to stop early
      * @throws IllegalArgumentException if {@code data.byteSize()} exceeds {@link Integer#MAX_VALUE}
@@ -82,21 +76,20 @@ public class BlockScanner extends Scanner {
      * @throws VectorscanException if the native scan call returns an error other than {@link
      *     com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
      */
-    private void scan(MemorySegment data, MatchHandler handler) {
+    private void scan(MemorySegment dataSegment, int length, MatchHandler handler) {
         setHandler(handler);
-        int ans = hs_scan(
-                this.database.dbNative, data, (int) data.byteSize(), 0, scratchNative, funcPtr, MemorySegment.NULL);
+        int ans = hs_scan(this.database.dbNative, dataSegment, length, 0, scratchNative, funcPtr, MemorySegment.NULL);
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }
     }
 
-    private void scan(MemorySegment data, BulkMatchHandler handler) {
+    private void scan(MemorySegment dataSegment, int length, BulkMatchHandler handler) {
         setBulkHandler(handler);
         int ans = hs_scan(
                 this.database.dbNative,
-                data,
-                (int) data.byteSize(),
+                dataSegment,
+                length,
                 0,
                 scratchNative,
                 collect_match$address(),
@@ -106,8 +99,7 @@ public class BlockScanner extends Scanner {
         }
         int remaining = collectMatchCtx.get(JAVA_INT, 8);
         if (remaining > 0) {
-            MemorySegment buffer = collectMatchCtx.get(C_POINTER, 0).reinterpret((long) remaining * 20);
-            handler.handle(buffer, remaining);
+            handler.handle(batchCallHandler.batchBuffer, remaining);
             collectMatchCtx.set(JAVA_INT, 8, 0);
         }
     }
@@ -115,7 +107,7 @@ public class BlockScanner extends Scanner {
     /**
      * Scans {@code data} using a <em>native</em> match-event callback supplied by the caller.
      *
-     * <p>Unlike {@link #scan(MemorySegment, MatchHandler)}, this method passes the
+     * This method passes the
      * caller-provided native function pointer directly to vectorscan, so matches do
      * <strong>not</strong> incur an upcall back into Java. This is intended for hot paths
      * where the per-match Java callback dominates cost.
@@ -124,8 +116,6 @@ public class BlockScanner extends Scanner {
      * ABI from its address. The caller must ensure the underlying symbol matches the
      * {@code match_event_handler} signature documented on {@link NativeMatchHandler}.
      *
-     * @param data    memory region containing the bytes to scan; {@code byteSize()} must fit
-     *                into a Java {@code int}
      * @param handler typed wrapper around the native callback and its opaque context
      * @throws IllegalArgumentException if {@code data.byteSize()} exceeds {@link Integer#MAX_VALUE}
      *                                  or {@code handler} is {@code null}
@@ -133,15 +123,9 @@ public class BlockScanner extends Scanner {
      * @throws VectorscanException      if the native scan call returns an error other than
      *                                  {@link com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
      */
-    private void scan(MemorySegment data, NativeMatchHandler handler) {
+    private void scan(MemorySegment dataSegment, int length, NativeMatchHandler handler) {
         int ans = hs_scan(
-                this.database.dbNative,
-                data,
-                (int) data.byteSize(),
-                0,
-                scratchNative,
-                handler.fnPtr(),
-                handler.context());
+                this.database.dbNative, dataSegment, length, 0, scratchNative, handler.fnPtr(), handler.context());
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }

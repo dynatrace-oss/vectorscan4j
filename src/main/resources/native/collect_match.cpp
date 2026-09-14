@@ -4,7 +4,7 @@
 #include <cstring>
 
 struct collect_match_context {
-    void    *buffer;
+    int32_t* buffer;
     int32_t  count;
     int32_t  batch_size;
     int     (*java_handler)(void *buffer, int32_t count);
@@ -27,7 +27,7 @@ void alloc_context(void *java_handler, collect_match_context **ctx_out) {
 }
 
 void resize_buffer(collect_match_context *ctx, int32_t new_batch_size) {
-    ctx->buffer     = realloc(ctx->buffer, (size_t)new_batch_size * 20);
+    ctx->buffer     = static_cast<int32_t *> (realloc(ctx->buffer, (size_t)new_batch_size * 20));
     ctx->batch_size = new_batch_size;
 }
 
@@ -36,22 +36,18 @@ int collect_match(unsigned int id,
                   unsigned long long to,
                   unsigned int flags,
                   void *context) {
-    auto *ctx = static_cast<collect_match_context *>(context);
+    collect_match_context *ctx = static_cast<collect_match_context *> (context);
 
-    char    *entry  = static_cast<char *>(ctx->buffer) + (size_t)ctx->count * 20;
-    int32_t  id32   = static_cast<int32_t>(id);
-    int64_t  from64 = static_cast<int64_t>(from);
-    int64_t  to64   = static_cast<int64_t>(to);
-    memcpy(entry,      &id32,   4);
-    memcpy(entry + 4,  &from64, 8);
-    memcpy(entry + 12, &to64,   8);
+    ctx->buffer[3 * ctx->count] = id;
+    ctx->buffer[3 * ctx->count + 1] = from;
+    ctx->buffer[3 * ctx->count + 2] = to;
     ctx->count++;
 
-    if (ctx->count == ctx->batch_size) {
-        int result = ctx->java_handler(ctx->buffer, ctx->count);
-        ctx->count = 0;
-        return result;
-    }
+    //if (ctx->count == ctx->batch_size) {
+    //    int result = ctx->java_handler(ctx->buffer, ctx->count);
+    //    ctx->count = 0;
+    //    return result;
+    //}
     return 0;
 }
 

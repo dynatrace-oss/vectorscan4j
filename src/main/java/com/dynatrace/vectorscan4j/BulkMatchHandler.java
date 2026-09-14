@@ -15,10 +15,7 @@
 */
 package com.dynatrace.vectorscan4j;
 
-import static java.lang.foreign.ValueLayout.*;
-
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.ValueLayout;
+import java.nio.ByteBuffer;
 
 /**
  * Same as MatchHandler, except the BulkMatchHandler one will collect a native buffer of matches, and then handle
@@ -31,16 +28,15 @@ import java.lang.foreign.ValueLayout;
  * @param handler how to handle each individual match. They get handled in FIFO order.
  */
 public record BulkMatchHandler(int bulkSize, MatchHandler handler) implements ScanHandler {
-    private static final ValueLayout.OfInt UNALIGNED_INT = JAVA_INT.withByteAlignment(1);
-    private static final ValueLayout.OfLong UNALIGNED_LONG = JAVA_LONG.withByteAlignment(1);
+    public static int nCalls = 0;
 
-    int handle(MemorySegment buf, int count) {
-        MemorySegment view = buf.reinterpret((long) count * 20);
+    int handle(ByteBuffer buf, int count) {
+        nCalls += 1;
         for (int i = 0; i < count; i++) {
-            long base = (long) i * 20;
-            int id = view.get(UNALIGNED_INT, base);
-            long from = view.get(UNALIGNED_LONG, base + 4);
-            long to = view.get(UNALIGNED_LONG, base + 12);
+            int b = i * 12;
+            int id = buf.getInt(b);
+            long from = buf.getInt(b + 4);
+            long to = buf.getInt(b + 8);
             if (!handler.onMatch(id, from, to)) return 1;
         }
         return 0;

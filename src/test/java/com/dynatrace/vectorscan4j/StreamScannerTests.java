@@ -22,8 +22,6 @@ import static java.lang.foreign.ValueLayout.JAVA_BYTE;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.dynatrace.vectorscan4j.constants.ExecutionMode;
-import java.lang.foreign.Arena;
-import java.lang.foreign.MemorySegment;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.EnumSet;
@@ -163,18 +161,6 @@ public class StreamScannerTests {
             StreamScanner scanner = new StreamScanner(db);
             assertDoesNotThrow(scanner::close);
             assertDoesNotThrow(scanner::close);
-        }
-    }
-
-    @Test
-    void tooBigInput() {
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        try (Database db = new Database(exprs, STREAM_MODE);
-                StreamScanner scanner = new StreamScanner(db);
-                Arena arena = Arena.ofConfined()) {
-            MemorySegment tiny = arena.allocate(1);
-            MemorySegment oversized = tiny.reinterpret((long) Integer.MAX_VALUE + 1L);
-            assertThrows(IllegalArgumentException.class, () -> scanner.scan(oversized, doNothing));
         }
     }
 

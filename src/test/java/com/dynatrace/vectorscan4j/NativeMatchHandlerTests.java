@@ -88,7 +88,7 @@ public class NativeMatchHandlerTests {
                 BlockScanner scanner = new BlockScanner(db);
                 Arena arena = Arena.ofConfined()) {
             MemorySegment data = arena.allocateFrom("foo");
-            assertThrows(IllegalArgumentException.class, () -> scanner.scan(data, (NativeMatchHandler) null));
+            assertThrows(IllegalArgumentException.class, () -> scanner.scan(data, (int) data.byteSize(), null));
         }
     }
 
@@ -201,9 +201,7 @@ public class NativeMatchHandlerTests {
             ByteBuffer direct = ByteBuffer.allocateDirect(3);
             direct.put(foo).flip();
             assertThrows(IllegalArgumentException.class, () -> scanner.scan(direct, (NativeMatchHandler) null));
-            assertThrows(
-                    IllegalArgumentException.class,
-                    () -> scanner.scan(arena.allocateFrom("foo"), (NativeMatchHandler) null));
+            assertThrows(IllegalArgumentException.class, () -> scanner.scan(arena.allocateFrom("foo"), 3, null));
         }
     }
 

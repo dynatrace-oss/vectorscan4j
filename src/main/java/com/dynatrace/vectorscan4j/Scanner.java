@@ -27,6 +27,7 @@ import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -38,10 +39,11 @@ import java.nio.charset.StandardCharsets;
  */
 abstract class Scanner implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
-    private ByteBuffer dataBuffer = ByteBuffer.allocateDirect(0);
+    protected ByteBuffer dataBuffer = ByteBuffer.allocateDirect(0);
+    protected MemorySegment dataSegment = MemorySegment.ofBuffer(dataBuffer);
     protected final Arena arena = Arena.ofShared();
     private final CallHandlerOnMatch callHandler = new CallHandlerOnMatch();
-    private final BatchCallHandler batchCallHandler = new BatchCallHandler();
+    protected final BatchCallHandler batchCallHandler = new BatchCallHandler();
     protected final MemorySegment funcPtr;
     protected final MemorySegment batchFuncPtr;
     protected final Database database;
@@ -81,10 +83,12 @@ abstract class Scanner implements AutoCloseable {
 
     static class BatchCallHandler implements VectorscanBatchedMatchHandler.Function {
         BulkMatchHandler handler;
+        ByteBuffer batchBuffer;
 
         @Override
-        public int apply(MemorySegment buffer, int count) {
-            return handler.handle(buffer, count);
+        public int apply(MemorySegment ignored, int count) {
+            batchBuffer.limit(count).position(0);
+            return handler.handle(batchBuffer, count);
         }
     }
 
@@ -116,14 +120,11 @@ abstract class Scanner implements AutoCloseable {
         }
     }
 
-    protected void setBuffer(ByteBuffer input) {
-        int requiredSize = input.remaining();
+    protected void ensureDataBuffer(int requiredSize) {
         if (requiredSize > dataBuffer.capacity()) {
             dataBuffer = ByteBuffer.allocateDirect(requiredSize);
+            dataSegment = MemorySegment.ofBuffer(dataBuffer);
         }
-        dataBuffer.clear();
-        dataBuffer.put(input);
-        dataBuffer.flip();
     }
 
     protected void setHandler(MatchHandler handler) {
@@ -135,6 +136,11 @@ abstract class Scanner implements AutoCloseable {
         if (handler.bulkSize() > batchBufferCapacity) {
             resize_buffer(collectMatchCtx, handler.bulkSize());
             batchBufferCapacity = handler.bulkSize();
+            this.batchCallHandler.batchBuffer = collectMatchCtx
+                    .get(C_POINTER, 0)
+                    .reinterpret((long) batchBufferCapacity * 12)
+                    .asByteBuffer()
+                    .order(ByteOrder.nativeOrder());
         }
     }
 
@@ -167,7 +173,11 @@ abstract class Scanner implements AutoCloseable {
      *                {@code false} to stop early
      */
     public void scan(byte[] data, ScanHandler handler) {
-        scan(ByteBuffer.wrap(data), handler);
+        ensureDataBuffer(data.length);
+        dataBuffer.clear();
+        dataBuffer.put(data);
+        dataBuffer.flip();
+        scan(dataSegment, dataBuffer.remaining(), handler);
     }
 
     public void scan(byte[] data, MatchHandler handler) {
@@ -209,10 +219,13 @@ abstract class Scanner implements AutoCloseable {
      */
     public void scan(ByteBuffer buf, ScanHandler handler) {
         if (buf.isDirect()) {
-            scan(MemorySegment.ofBuffer(buf), handler);
+            scan(MemorySegment.ofBuffer(buf), buf.remaining(), handler);
         } else {
-            setBuffer(buf);
-            scan(MemorySegment.ofBuffer(dataBuffer), handler);
+            ensureDataBuffer(buf.remaining());
+            dataBuffer.clear();
+            dataBuffer.put(buf);
+            dataBuffer.flip();
+            scan(dataSegment, dataBuffer.remaining(), handler);
         }
     }
 
@@ -227,11 +240,10 @@ abstract class Scanner implements AutoCloseable {
      * this scanner's compiled database. Implementations call into native vectorscan and forward match
      * callbacks to {@code handler}.
      *
-     * @param data    memory region containing scan input
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
      */
-    protected abstract void scan(MemorySegment data, ScanHandler handler);
+    protected abstract void scan(MemorySegment dataSegment, int length, ScanHandler handler);
 
     public long getScratchSize() {
         try (Arena temp = Arena.ofConfined()) {

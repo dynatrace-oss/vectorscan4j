@@ -55,7 +55,7 @@ public class BlockScannerTests {
                 BlockScanner scanner = new BlockScanner(db)) {
             String input = "I am searching for pattern1, has anyone seen pattern1?";
             List<Integer> matchedIds = new ArrayList<>();
-            scanner.scan(input, (id, from, to) -> {
+            scanner.scan(input, (id, _, _) -> {
                 matchedIds.add(id);
                 return true;
             });
@@ -128,18 +128,6 @@ public class BlockScannerTests {
     }
 
     @Test
-    void tooBigInput() {
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
-                BlockScanner scanner = new BlockScanner(db);
-                Arena arena = Arena.ofConfined()) {
-            MemorySegment tiny = arena.allocate(1);
-            MemorySegment oversized = tiny.reinterpret((long) Integer.MAX_VALUE + 1L);
-            assertThrows(IllegalArgumentException.class, () -> scanner.scan(oversized, doNothing));
-        }
-    }
-
-    @Test
     void directByteBuffer() {
         List<Expression> exprs = List.of(new Expression("pattern1"));
         try (Database db = new Database(exprs, BLOCK_MODE);
@@ -159,7 +147,55 @@ public class BlockScannerTests {
     }
 
     @Test
-    void byteBufferRangeRespected() {
+    void directByteBufferRangeRespected() {
+        List<Expression> exprs = List.of(new Expression("pattern1"));
+        try (Database db = new Database(exprs, BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            String in = "pattern1__pattern1__pattern1";
+            byte[] arr = in.getBytes(StandardCharsets.UTF_8);
+            ByteBuffer buf = ByteBuffer.allocateDirect(arr.length);
+            buf.put(arr);
+            buf.flip();
+            List<Integer> matchedIds = new ArrayList<>();
+            MatchHandler collect = (id, _, _) -> {
+                matchedIds.add(id);
+                return true;
+            };
+
+            // Full range contains three occurrences.
+            scanner.scan(buf, collect);
+            assertEquals(List.of(0, 0, 0), matchedIds);
+
+            // Restrict view to only the middle occurrence: bytes[9..18).
+            matchedIds.clear();
+            buf.position(9);
+            buf.limit(18);
+            scanner.scan(buf, collect);
+            assertEquals(List.of(0), matchedIds);
+        }
+    }
+
+    @Test
+    void heapByteBuffer() {
+        List<Expression> exprs = List.of(new Expression("pattern1"));
+        try (Database db = new Database(exprs, BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            byte[] bytes = "found pattern1 here".getBytes(StandardCharsets.UTF_8);
+            ByteBuffer direct = ByteBuffer.allocate(bytes.length);
+            direct.put(bytes);
+            direct.flip(); // position=0, limit=bytes.length
+
+            List<Integer> matchedIds = new ArrayList<>();
+            scanner.scan(direct, (id, _, _) -> {
+                matchedIds.add(id);
+                return true;
+            });
+            assertEquals(List.of(0), matchedIds);
+        }
+    }
+
+    @Test
+    void heapByteBufferRangeRespected() {
         List<Expression> exprs = List.of(new Expression("pattern1"));
         try (Database db = new Database(exprs, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
@@ -184,7 +220,7 @@ public class BlockScannerTests {
     }
 
     @Test
-    void scanByteArray() {
+    void byteArray() {
         List<Expression> exprs = List.of(new Expression("pattern1"));
         try (Database db = new Database(exprs, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
@@ -196,6 +232,22 @@ public class BlockScannerTests {
                 return true;
             });
             assertEquals(List.of(0, 0), matchedIds);
+        }
+    }
+
+    @Test
+    void byteArrayRangeRespected() {
+        List<Expression> exprs = List.of(new Expression("pattern1"));
+        try (Database db = new Database(exprs, BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            byte[] data = "found pattern1 twice: pattern1".getBytes(StandardCharsets.UTF_8);
+
+            List<Integer> matchedIds = new ArrayList<>();
+            scanner.scan(data, 5, 15, (id, _, _) -> {
+                matchedIds.add(id);
+                return true;
+            });
+            assertEquals(List.of(0), matchedIds);
         }
     }
 
@@ -342,7 +394,7 @@ public class BlockScannerTests {
             Arena arena = Arena.ofConfined();
             MemorySegment data = arena.allocateFrom("Input String");
             arena.close();
-            assertThrows(IllegalStateException.class, () -> scanner.scan(data, doNothing));
+            assertThrows(IllegalStateException.class, () -> scanner.scan(data, (int) data.byteSize(), doNothing));
         }
     }
 

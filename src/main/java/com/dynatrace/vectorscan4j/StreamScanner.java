@@ -61,12 +61,9 @@ public class StreamScanner extends Scanner {
     }
 
     @Override
-    public void scan(MemorySegment data, ScanHandler handler) {
+    public void scan(MemorySegment dataSegment, int length, ScanHandler handler) {
         if (!streamOpen) {
             throw new IllegalStateException("Stream is closed. Open a new stream first.");
-        }
-        if (data.byteSize() > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException("Input MemorySegment is too big.");
         }
         if (database.isClosed()) {
             throw new IllegalStateException("Database was already closed.");
@@ -75,9 +72,9 @@ public class StreamScanner extends Scanner {
             throw new IllegalArgumentException("handler must not be null");
         }
         switch (handler) {
-            case MatchHandler h -> scan(data, h);
-            case BulkMatchHandler h -> scan(data, h);
-            case NativeMatchHandler h -> scan(data, h);
+            case MatchHandler h -> scan(dataSegment, length, h);
+            case BulkMatchHandler h -> scan(dataSegment, length, h);
+            case NativeMatchHandler h -> scan(dataSegment, length, h);
         }
     }
 
@@ -86,50 +83,48 @@ public class StreamScanner extends Scanner {
      * buffer.
      *
      * <p>This is an advanced, zero-copy entry point intended for callers that manage off-heap or
-     * foreign memory explicitly. The supplied {@code data} segment must remain alive and accessible
+     * foreign memory explicitly. The supplied {@code dataSegment} segment must remain alive and accessible
      * for the entire duration of this synchronous call.
      *
-     * <p>Only the first {@code length} bytes of {@code data} are scanned. Callers must ensure that
-     * {@code length} is non-negative and does not exceed {@code data.byteSize()}.
+     * <p>Only the first {@code length} bytes of {@code dataSegment} are scanned. Callers must ensure that
+     * {@code length} is non-negative and does not exceed {@code dataSegment.byteSize()}.
      *
-     * @param data memory region containing the bytes to scan
+     * @param dataSegment memory region containing the bytes to scan
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *     {@code false} to stop early
      * @throws VectorscanException if vectorscan reports an error other than early termination
      */
-    private void scan(MemorySegment data, MatchHandler handler) {
+    private void scan(MemorySegment dataSegment, int length, MatchHandler handler) {
         setHandler(handler);
-        int ans = hs_scan_stream(
-                streamNative, data, (int) data.byteSize(), 0, scratchNative, funcPtr, MemorySegment.NULL);
+        int ans = hs_scan_stream(streamNative, dataSegment, length, 0, scratchNative, funcPtr, MemorySegment.NULL);
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }
     }
 
-    private void scan(MemorySegment data, BulkMatchHandler handler) {
+    private void scan(MemorySegment dataSegment, int length, BulkMatchHandler handler) {
         throw new RuntimeException();
     }
 
     /**
-     * Scans {@code data} using a <em>native</em> match-event callback supplied by the caller.
+     * Scans {@code dataSegment} using a <em>native</em> match-event callback supplied by the caller.
      *
-     * <p>Unlike {@link #scan(MemorySegment, MatchHandler)}, this method passes the caller-provided
-     * native function pointer directly to vectorscan, so matches do <strong>not</strong> incur an
-     * upcall back into Java.
+     * This method passes the caller-provided native function pointer directly to vectorscan,
+     * so matches do <strong>not</strong> incur an upcall back into Java.
      *
-     * @param data memory region containing the bytes to scan; {@code byteSize()} must fit into a Java
+     * @param dataSegment memory region containing the bytes to scan; {@code byteSize()} must fit into a Java
      *     {@code int}
      * @param handler typed wrapper around the native callback and its opaque context
-     * @throws IllegalArgumentException if {@code data.byteSize()} exceeds {@link Integer#MAX_VALUE}
+     * @throws IllegalArgumentException if {@code dataSegment.byteSize()} exceeds {@link Integer#MAX_VALUE}
      *     or {@code handler} is {@code null}
      * @throws IllegalStateException if the underlying {@link Database} has been closed or stream is
      *     currently closed
      * @throws VectorscanException if the native scan call returns an error other than
      *     {@link com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
      */
-    private void scan(MemorySegment data, NativeMatchHandler handler) {
-        int ans = hs_scan_stream(
-                streamNative, data, (int) data.byteSize(), 0, scratchNative, handler.fnPtr(), handler.context());
+    private void scan(MemorySegment dataSegment, int length, NativeMatchHandler handler) {
+        int ans =
+                hs_scan_stream(streamNative, dataSegment, length, 0, scratchNative, handler.fnPtr(), handler.context());
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }
