@@ -14,13 +14,13 @@ jobs:
         run: sudo apt-get install -y libboost-dev ragel pkg-config
 
       - name: Clone Vectorscan
-        run: git clone --depth 1 https://github.com/VectorCamp/vectorscan.git
+        run: git clone --depth 1 --recurse-submodules https://github.com/VectorCamp/vectorscan.git
 
       - name: Build Vectorscan
         working-directory: vectorscan
         run: |
           cmake -B build -DBUILD_SHARED_LIBS=On -DCMAKE_BUILD_TYPE=Release -DUSE_CPU_NATIVE=On -DFAT_RUNTIME=Off
-          cmake --build build --config Release
+          cmake --build build --config Release -- -j$(nproc)
 
       - name: Copy shared library
         run: cp vectorscan/build/lib/libhs.so src/main/resources/native/linux/aarch64/
