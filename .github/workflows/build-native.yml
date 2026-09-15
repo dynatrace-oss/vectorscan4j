@@ -12,22 +12,26 @@ jobs:
             platform: linux
             arch: x86_64
             gradleCmd: ./gradlew
+            vectorscanLib: libhs.so
+            installDeps: sudo apt-get install -y libboost-dev ragel pkg-config
           - os: ubuntu-24.04-arm     # Linux aarch64
             platform: linux
             arch: aarch64
             gradleCmd: ./gradlew
+            vectorscanLib: libhs.so
+            installDeps: sudo apt-get install -y libboost-dev ragel pkg-config
           - os: macos-13             # macOS Intel x86_64
             platform: osx
             arch: x86_64
             gradleCmd: ./gradlew
+            vectorscanLib: libhs.dylib
+            installDeps: brew install boost ragel pkg-config
           - os: macos-latest         # macOS Apple Silicon aarch64
             platform: osx
             arch: aarch64
             gradleCmd: ./gradlew
-#          - os: windows-latest       # Windows x86_64
-#            platform: windows
-#            arch: x86_64
-#            gradleCmd: gradlew.bat
+            vectorscanLib: libhs.dylib
+            installDeps: brew install boost ragel pkg-config
 
     runs-on: ${{ matrix.os }}
 
@@ -41,7 +45,22 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582
 
-      - name: Build
+      - name: Install Vectorscan build dependencies
+        run: ${{ matrix.installDeps }}
+
+      - name: Clone Vectorscan
+        run: git clone --depth 1 --recurse-submodules https://github.com/VectorCamp/vectorscan.git
+
+      - name: Build Vectorscan
+        working-directory: vectorscan
+        run: |
+          cmake -B build -DBUILD_SHARED_LIBS=On -DCMAKE_BUILD_TYPE=Release -DUSE_CPU_NATIVE=On -DFAT_RUNTIME=Off -DBUILD_BENCHMARKS=Off -DBUILD_UNIT=Off -DBUILD_TOOLS=Off -DBUILD_EXAMPLES=Off -DBUILD_DOC=Off
+          cmake --build build --config Release -- -j$(nproc)
+
+      - name: Copy Vectorscan shared library
+        run: cp vectorscan/build/lib/${{ matrix.vectorscanLib }} src/main/resources/native/${{ matrix.platform }}/${{ matrix.arch }}/
+
+      - name: Build collect_match
         run: ${{ matrix.gradleCmd }} buildCollectMatch
 
       - name: Test
@@ -87,23 +106,10 @@ jobs:
           git add src/main/resources/native/
           git diff --staged --quiet || echo "changed=true" >> $GITHUB_OUTPUT
 
-      - uses: actions/setup-java@v6
-        if: steps.diff.outputs.changed == 'true'
-        with:
-          java-version: '25'
-          distribution: 'temurin'
-
-      - uses: gradle/actions/setup-gradle@af1da67850ed9a4cedd57bfd976089dd991e2582
-        if: steps.diff.outputs.changed == 'true'
-
-      - name: Run unit tests
-        if: steps.diff.outputs.changed == 'true'
-        run: ./gradlew test
-
       - name: Commit and push
         if: steps.diff.outputs.changed == 'true'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: update compiled native libraries"
+          git commit -m "chore: update native libraries"
           git push
