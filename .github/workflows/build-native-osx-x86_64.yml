@@ -1,11 +1,11 @@
-name: Build native libraries (Linux aarch64)
+name: Build native libraries (macOS x86_64)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    runs-on: macos-13
 
     steps:
       - uses: actions/checkout@v7
@@ -18,7 +18,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
 
       - name: Install Vectorscan build dependencies
-        run: sudo apt-get install -y libboost-dev ragel pkg-config
+        run: brew install boost ragel pkg-config
 
       - name: Clone Vectorscan
         run: git clone --depth 1 --recurse-submodules https://github.com/VectorCamp/vectorscan.git
@@ -31,8 +31,8 @@ jobs:
 
       - name: Copy Vectorscan shared library
         run: |
-          mkdir -p src/main/resources/native/linux/aarch64/
-          cp vectorscan/build/lib/libhs.so src/main/resources/native/linux/aarch64/
+          mkdir -p src/main/resources/native/osx/x86_64/
+          cp vectorscan/build/lib/libhs.dylib src/main/resources/native/osx/x86_64/
 
       - name: Build collect_match
         run: ./gradlew buildCollectMatch
@@ -42,8 +42,8 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: native-linux-aarch64
-          path: src/main/resources/native/linux/aarch64/
+          name: native-osx-x86_64
+          path: src/main/resources/native/osx/x86_64/
 
   commit:
     needs: build
@@ -56,8 +56,8 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: native-linux-aarch64
-          path: src/main/resources/native/linux/aarch64/
+          name: native-osx-x86_64
+          path: src/main/resources/native/osx/x86_64/
 
       - name: Check for changes
         id: diff
@@ -70,5 +70,5 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: update native libraries (linux/aarch64)"
+          git commit -m "chore: update native libraries (osx/x86_64)"
           git push

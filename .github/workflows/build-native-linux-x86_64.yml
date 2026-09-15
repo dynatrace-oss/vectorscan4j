@@ -1,16 +1,23 @@
-name: Build Vectorscan (Linux aarch64)
+name: Build native libraries (Linux x86_64)
 
 on:
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Install build dependencies
+      - uses: actions/setup-java@v6
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Install Vectorscan build dependencies
         run: sudo apt-get install -y libboost-dev ragel pkg-config
 
       - name: Clone Vectorscan
@@ -19,16 +26,24 @@ jobs:
       - name: Build Vectorscan
         working-directory: vectorscan
         run: |
-          cmake -B build -DBUILD_SHARED_LIBS=On -DCMAKE_BUILD_TYPE=Release -DUSE_CPU_NATIVE=On -DFAT_RUNTIME=Off -DBUILD_BENCHMARKS=Off -DBUILD_UNIT=Off -DBUILD_TOOLS=Off -DBUILD_EXAMPLES=Off -DBUILD_DOC=Off
+          cmake -B build -DBUILD_SHARED_LIBS=On -DCMAKE_BUILD_TYPE=Release -DFAT_RUNTIME=Off -DBUILD_BENCHMARKS=Off -DBUILD_UNIT=Off -DBUILD_TOOLS=Off -DBUILD_EXAMPLES=Off -DBUILD_DOC=Off
           cmake --build build --config Release -- -j$(nproc)
 
-      - name: Copy shared library
-        run: cp vectorscan/build/lib/libhs.so src/main/resources/native/linux/aarch64/
+      - name: Copy Vectorscan shared library
+        run: |
+          mkdir -p src/main/resources/native/linux/x86_64/
+          cp vectorscan/build/lib/libhs.so src/main/resources/native/linux/x86_64/
+
+      - name: Build collect_match
+        run: ./gradlew buildCollectMatch
+
+      - name: Test
+        run: ./gradlew test
 
       - uses: actions/upload-artifact@v7
         with:
-          name: vectorscan-linux-aarch64
-          path: src/main/resources/native/linux/aarch64/libhs.so
+          name: native-linux-x86_64
+          path: src/main/resources/native/linux/x86_64/
 
   commit:
     needs: build
@@ -41,8 +56,8 @@ jobs:
 
       - uses: actions/download-artifact@v8
         with:
-          name: vectorscan-linux-aarch64
-          path: src/main/resources/native/linux/aarch64/
+          name: native-linux-x86_64
+          path: src/main/resources/native/linux/x86_64/
 
       - name: Check for changes
         id: diff
@@ -55,5 +70,5 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git commit -m "chore: update Vectorscan native library (linux/aarch64)"
+          git commit -m "chore: update native libraries (linux/x86_64)"
           git push
