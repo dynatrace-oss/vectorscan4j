@@ -24,11 +24,11 @@ import java.nio.file.Path;
 final class NativeLoader {
     private NativeLoader() {}
 
-    public static synchronized void load(String libBaseName, String version) {
+    public static synchronized void load(String libBaseName) {
         try {
             String osName = System.getProperty("os.name");
             String osArch = System.getProperty("os.arch");
-            Path resourcePath = buildResourcePath(libBaseName, osName, osArch, version);
+            Path resourcePath = buildResourcePath(libBaseName, osName, osArch);
 
             try (InputStream is = NativeLoader.class.getResourceAsStream(resourcePath.toString())) {
                 if (is == null) {
@@ -51,15 +51,8 @@ final class NativeLoader {
         }
     }
 
-    public static synchronized void load(String libBaseName) {
-        load(libBaseName, null);
-    }
-
-    static Path buildResourcePath(String libBaseName, String osName, String osArch, String version) {
+    static Path buildResourcePath(String libBaseName, String osName, String osArch) {
         String mappedName = System.mapLibraryName(libBaseName);
-        if (version != null) {
-            mappedName += "." + version;
-        }
         String os = normalizeOs(osName);
         String arch = normalizeArch(osArch);
         return Path.of(String.format("/native/%s/%s/%s", os, arch, mappedName));
