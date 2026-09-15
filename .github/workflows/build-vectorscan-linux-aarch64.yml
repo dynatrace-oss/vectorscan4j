@@ -1,0 +1,59 @@
+name: Build Vectorscan (Linux aarch64)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install build dependencies
+        run: sudo apt-get install -y libboost-dev ragel pkg-config
+
+      - name: Clone Vectorscan
+        run: git clone --depth 1 https://github.com/VectorCamp/vectorscan.git
+
+      - name: Build Vectorscan
+        working-directory: vectorscan
+        run: |
+          cmake -B build -DBUILD_SHARED_LIBS=On -DCMAKE_BUILD_TYPE=Release -DUSE_CPU_NATIVE=On -DFAT_RUNTIME=Off
+          cmake --build build --config Release
+
+      - name: Copy shared library
+        run: cp vectorscan/build/lib/libhs.so src/main/resources/native/linux/aarch64/
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vectorscan-linux-aarch64
+          path: src/main/resources/native/linux/aarch64/libhs.so
+
+  commit:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: vectorscan-linux-aarch64
+          path: src/main/resources/native/linux/aarch64/
+
+      - name: Check for changes
+        id: diff
+        run: |
+          git add src/main/resources/native/
+          git diff --staged --quiet || echo "changed=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: update Vectorscan native library (linux/aarch64)"
+          git push
