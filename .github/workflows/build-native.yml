@@ -58,7 +58,9 @@ jobs:
           cmake --build build --config Release -- -j$(nproc)
 
       - name: Copy Vectorscan shared library
-        run: cp vectorscan/build/lib/${{ matrix.vectorscanLib }} src/main/resources/native/${{ matrix.platform }}/${{ matrix.arch }}/
+        run: |
+          mkdir -p src/main/resources/native/${{ matrix.platform }}/${{ matrix.arch }}/
+          cp vectorscan/build/lib/${{ matrix.vectorscanLib }} src/main/resources/native/${{ matrix.platform }}/${{ matrix.arch }}/
 
       - name: Build collect_match
         run: ${{ matrix.gradleCmd }} buildCollectMatch
