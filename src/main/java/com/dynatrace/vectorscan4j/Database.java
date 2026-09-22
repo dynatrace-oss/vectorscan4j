@@ -83,12 +83,12 @@ public class Database implements AutoCloseable {
             this.mode = executionMode;
             this.modeNative = executionMode.equals(ExecutionMode.BLOCK_MODE) ? 1 : 2 + (1 << 24);
             // allocate all required function arguments for database compilation as MemorySegments
-            int nElems = expressions.size();
+            int nElems = this.expressions.size();
             MemorySegment patterns = temp.allocate(C_POINTER, nElems);
             MemorySegment flags = temp.allocate(C_INT, nElems);
             MemorySegment ids = temp.allocate(C_INT, nElems);
             for (int i = 0; i < nElems; i++) {
-                Expression expression = expressions.get(i);
+                Expression expression = this.expressions.get(i);
                 MemorySegment pattern = temp.allocateFrom(expression.pattern());
                 patterns.setAtIndex(C_POINTER, i, pattern);
                 flags.setAtIndex(C_INT, i, expression.value());
