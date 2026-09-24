@@ -155,6 +155,22 @@ public class PatternFlagsTests {
     }
 
     @Test
+    void singleMatchPerPattern() {
+        // With SINGLEMATCH each pattern fires at most once, regardless of how many times it occurs.
+        // Two patterns, each appearing twice → exactly 2 callbacks total (one per pattern).
+        List<Expression> exprs = List.of(
+                new Expression("foo", EnumSet.of(SINGLEMATCH)), // id=0, appears twice
+                new Expression("bar", EnumSet.of(SINGLEMATCH)) // id=1, appears twice
+                );
+        try (Database db = new Database(exprs, BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            List<Integer> ids = matchIds(scanner, "foo bar foo bar");
+            assertEquals(2, ids.size());
+            assertTrue(ids.containsAll(List.of(0, 1)));
+        }
+    }
+
+    @Test
     void allowEmpty() {
         // "a*" can match an empty string → compilation fails without HS_FLAG_ALLOWEMPTY
         assertThrows(RuntimeException.class, () -> {

@@ -586,4 +586,57 @@ public class BlockScannerTests {
             assertTrue(sameMatches(scanner, input, 64));
         }
     }
+
+    @Test
+    void multipleStartPositions() {
+        // "foo.*bar" on "foofooxyzbar": two possible starts (0 and 3) both end at offset 12,
+        // but SOM_LEFTMOST reports only the leftmost start — so just one match at (0, 12).
+        List<Expression> exprs = List.of(new Expression("foo.*bar", EnumSet.of(SOM_LEFTMOST)));
+        try (Database db = new Database(exprs, BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            record Match(long from, long to) {}
+            List<Match> matches = new ArrayList<>();
+            scanner.scan("foofooxyzbar", (_, from, to) -> {
+                matches.add(new Match(from, to));
+                return true;
+            });
+            assertEquals(List.of(new Match(0, 12)), matches);
+        }
+    }
+
+    @Test
+    void multipleEndPositions() {
+        // "foo.*bar" matches at two end positions in "fooxyzbarbar":
+        // once ending at the first "bar" (to=9) and once ending at the second (to=12).
+        List<Expression> exprs = List.of(new Expression("foo.*bar", EnumSet.of(SOM_LEFTMOST)));
+        try (Database db = new Database(exprs, BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            record Match(long from, long to) {}
+            List<Match> matches = new ArrayList<>();
+            scanner.scan("fooxyzbarbar", (_, from, to) -> {
+                matches.add(new Match(from, to));
+                return true;
+            });
+            assertEquals(List.of(new Match(0, 9), new Match(0, 12)), matches);
+        }
+    }
+
+    @Test
+    void multipleStartAndEndPositions() {
+        // "foo.*bar" on "foofooxyzbarbar": two "foo" anchors and two "bar" anchors.
+        // SOM_LEFTMOST reports the leftmost start per end position:
+        // - to=12 ("foofooxyzbar"): leftmost start is 0, not 3
+        // - to=15 ("foofooxyzbarbar"): leftmost start is 0, not 3
+        List<Expression> exprs = List.of(new Expression("foo.*bar", EnumSet.of(SOM_LEFTMOST)));
+        try (Database db = new Database(exprs, BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            record Match(long from, long to) {}
+            List<Match> matches = new ArrayList<>();
+            scanner.scan("foofooxyzbarbar", (_, from, to) -> {
+                matches.add(new Match(from, to));
+                return true;
+            });
+            assertEquals(List.of(new Match(0, 12), new Match(0, 15)), matches);
+        }
+    }
 }

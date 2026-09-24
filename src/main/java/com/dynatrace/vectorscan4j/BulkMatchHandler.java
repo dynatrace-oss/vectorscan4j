@@ -28,10 +28,8 @@ import java.nio.ByteBuffer;
  * @param handler how to handle each individual match. They get handled in FIFO order.
  */
 public record BulkMatchHandler(int bulkSize, MatchHandler handler) implements ScanHandler {
-    public static int nCalls = 0;
 
     int handle(ByteBuffer buf, int count) {
-        nCalls += 1;
         for (int i = 0; i < count; i++) {
             int b = i * 12;
             int id = buf.getInt(b);
