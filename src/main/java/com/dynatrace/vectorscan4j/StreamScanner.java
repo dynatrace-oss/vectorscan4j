@@ -73,7 +73,7 @@ public class StreamScanner extends Scanner {
         }
         switch (handler) {
             case MatchHandler h -> scan(dataSegment, length, h);
-            case BulkMatchHandler h -> scan(dataSegment, length, h);
+            case BatchedMatchHandler h -> scan(dataSegment, length, h);
             case NativeMatchHandler h -> scan(dataSegment, length, h);
         }
     }
@@ -102,7 +102,7 @@ public class StreamScanner extends Scanner {
         }
     }
 
-    private void scan(MemorySegment dataSegment, int length, BulkMatchHandler handler) {
+    private void scan(MemorySegment dataSegment, int length, BatchedMatchHandler handler) {
         throw new RuntimeException();
     }
 

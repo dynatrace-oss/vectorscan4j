@@ -15,4 +15,4 @@
 */
 package com.dynatrace.vectorscan4j;
 
-public sealed interface ScanHandler permits MatchHandler, BulkMatchHandler, NativeMatchHandler {}
+public sealed interface ScanHandler permits MatchHandler, BatchedMatchHandler, NativeMatchHandler {}

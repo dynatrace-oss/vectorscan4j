@@ -52,7 +52,7 @@ public class BlockScanner extends Scanner {
         }
         switch (handler) {
             case MatchHandler h -> scan(dataSegment, length, h);
-            case BulkMatchHandler h -> scan(dataSegment, length, h);
+            case BatchedMatchHandler h -> scan(dataSegment, length, h);
             case NativeMatchHandler h -> scan(dataSegment, length, h);
         }
     }
@@ -84,7 +84,7 @@ public class BlockScanner extends Scanner {
         }
     }
 
-    private void scan(MemorySegment dataSegment, int length, BulkMatchHandler handler) {
+    private void scan(MemorySegment dataSegment, int length, BatchedMatchHandler handler) {
         setBulkHandler(handler);
         int ans = hs_scan(
                 this.database.dbNative,
@@ -99,7 +99,7 @@ public class BlockScanner extends Scanner {
         }
         int remaining = collectMatchCtx.get(JAVA_INT, 8);
         if (remaining > 0) {
-            handler.handle(batchCallHandler.batchBuffer, remaining);
+            handler.handler().matchAll(batchCallHandler.batchBuffer, remaining);
             collectMatchCtx.set(JAVA_INT, 8, 0);
         }
     }

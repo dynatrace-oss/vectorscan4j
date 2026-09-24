@@ -568,7 +568,13 @@ public class BlockScannerTests {
             hash.set(hash.get() ^ Long.valueOf(to).hashCode());
             return true;
         };
-        BulkMatchHandler bulkHashMatch = new BulkMatchHandler(bulkSize, hashMatch);
+        BatchedMatchHandler bulkHashMatch = new BatchedMatchHandler(bulkSize, (buf, nMatches) -> {
+            for (int i = 0; i < nMatches; i++) {
+                int b = i * 12;
+                hashMatch.onMatch(buf.getInt(b), buf.getInt(b + 4), buf.getInt(b + 8));
+            }
+            return true;
+        });
         hash.set(0);
         s1.scan(input, hashMatch);
         int ans1 = hash.get();
@@ -583,7 +589,7 @@ public class BlockScannerTests {
         try (Database db = new Database(expressions, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             String input = "We match pattern1, pattern2 and pattern3 one time each.";
-            assertTrue(sameMatches(scanner, input, 64));
+            assertTrue(sameMatches(scanner, input, 4));
         }
     }
 

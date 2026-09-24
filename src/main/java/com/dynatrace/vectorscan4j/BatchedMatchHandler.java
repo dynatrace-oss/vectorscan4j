@@ -15,28 +15,14 @@
 */
 package com.dynatrace.vectorscan4j;
 
-import java.nio.ByteBuffer;
-
 /**
  * Same as MatchHandler, except the BulkMatchHandler one will collect a native buffer of matches, and then handle
  * all those matches at once.
  * Use this when your scans produce a large number of matches, and you want to save on the native-to-Java upcall overhead.
  * Important note: This delays the handling of any one match until its batch has been collected, meaning
  * the check for any early stopping condition will also be delayed. If your workload often stops your scanning early,
- * this could run slower compared to using the default MatchHandler.
- * @param bulkSize how many matches to collect before handling all at once.
- * @param handler how to handle each individual match. They get handled in FIFO order.
+ * this would likely run slower compared to using the default MatchHandler.
+ * @param batchSize how many matches to collect before handling all at once.
+ * @param handler how to handle a whole batch of collected matches.
  */
-public record BulkMatchHandler(int bulkSize, MatchHandler handler) implements ScanHandler {
-
-    int handle(ByteBuffer buf, int count) {
-        for (int i = 0; i < count; i++) {
-            int b = i * 12;
-            int id = buf.getInt(b);
-            long from = buf.getInt(b + 4);
-            long to = buf.getInt(b + 8);
-            if (!handler.onMatch(id, from, to)) return 1;
-        }
-        return 0;
-    }
-}
+public record BatchedMatchHandler(int batchSize, BatchHandler handler) implements ScanHandler {}

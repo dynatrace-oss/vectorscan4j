@@ -43,11 +43,11 @@ int collect_match(unsigned int id,
     ctx->buffer[3 * ctx->count + 2] = to;
     ctx->count++;
 
-    //if (ctx->count == ctx->batch_size) {
-    //    int result = ctx->java_handler(ctx->buffer, ctx->count);
-    //    ctx->count = 0;
-    //    return result;
-    //}
+    if (ctx->count == ctx->batch_size) {
+        int result = ctx->java_handler(ctx->buffer, ctx->count);
+        ctx->count = 0;
+        return result;
+    }
     return 0;
 }
 

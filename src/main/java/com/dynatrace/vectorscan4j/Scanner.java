@@ -82,13 +82,12 @@ abstract class Scanner implements AutoCloseable {
     }
 
     static class BatchCallHandler implements VectorscanBatchedMatchHandler.Function {
-        BulkMatchHandler handler;
+        BatchedMatchHandler batchedMatchHandler;
         ByteBuffer batchBuffer;
 
         @Override
         public int apply(MemorySegment ignored, int count) {
-            batchBuffer.limit(count).position(0);
-            return handler.handle(batchBuffer, count);
+            return batchedMatchHandler.handler().matchAll(batchBuffer, count) ? 0 : 1;
         }
     }
 
@@ -131,11 +130,11 @@ abstract class Scanner implements AutoCloseable {
         this.callHandler.handler = handler;
     }
 
-    protected void setBulkHandler(BulkMatchHandler handler) {
-        this.batchCallHandler.handler = handler;
-        if (handler.bulkSize() > batchBufferCapacity) {
-            resize_buffer(collectMatchCtx, handler.bulkSize());
-            batchBufferCapacity = handler.bulkSize();
+    protected void setBulkHandler(BatchedMatchHandler handler) {
+        this.batchCallHandler.batchedMatchHandler = handler;
+        if (handler.batchSize() > batchBufferCapacity) {
+            resize_buffer(collectMatchCtx, handler.batchSize());
+            batchBufferCapacity = handler.batchSize();
             this.batchCallHandler.batchBuffer = collectMatchCtx
                     .get(C_POINTER, 0)
                     .reinterpret((long) batchBufferCapacity * 12)
