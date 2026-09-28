@@ -133,6 +133,8 @@ As an advanced alternative to a Java-side `MatchHandler`, vectorscan4j also supp
 NativeMatchHandlers point to native functions that have to first be dynamically loaded during runtime. 
 Using native callback functions as opposed to Java functions can reduces the callback overhead that accrues with every upcall from native scanning to JVM execution.
 
+See [docs/native-match-handlers.md](docs/native-match-handlers.md) for the full guide: the ABI contract, writing a
+handler in C++ (or C, Rust, or anything else that exports C symbols), building it, and the lifetime rules.
 For concrete usage examples, see the [unit tests](src/test/java/com/dynatrace/vectorscan4j/NativeMatchHandlerTests.java).
 
 ### Database Serialization/Deserialization
