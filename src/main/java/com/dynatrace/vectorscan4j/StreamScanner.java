@@ -123,8 +123,8 @@ public class StreamScanner extends Scanner {
      *     {@link com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
      */
     private void scan(MemorySegment dataSegment, int length, NativeMatchHandler handler) {
-        int ans =
-                hs_scan_stream(streamNative, dataSegment, length, 0, scratchNative, handler.fnPtr(), handler.context());
+        int ans = hs_scan_stream(
+                streamNative, dataSegment, length, 0, scratchNative, handler.nativeOnMatch, handler.context());
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }
