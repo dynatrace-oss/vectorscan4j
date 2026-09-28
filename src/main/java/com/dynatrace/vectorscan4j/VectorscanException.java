@@ -21,11 +21,20 @@ import java.util.Map;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+/**
+ * Thrown when a native vectorscan call reports a failure. The message carries the corresponding
+ * {@link ErrorCode}.
+ */
 public class VectorscanException extends RuntimeException {
     // reverse lookup from C++ error code type (a.k.a. int) to vectorscan4j ErrorCode
     private static final Map<Integer, ErrorCode> BY_CODE =
             Arrays.stream(ErrorCode.values()).collect(Collectors.toMap(ErrorCode::getCode, Function.identity()));
 
+    /**
+     * Creates an exception for a native error code.
+     *
+     * @param code the error code returned by the native call, as defined by {@link ErrorCode}
+     */
     public VectorscanException(int code) {
         super(String.format(
                 "Failure in native Vectorscan call. ErrorCode: %s. Consult official Hyperscan/Vectorscan documentation for more information.",

@@ -39,16 +39,36 @@ import java.nio.charset.StandardCharsets;
  */
 abstract class Scanner implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
+
+    /** Off-heap staging buffer that on-heap input is copied into before scanning; grown as needed. */
     protected ByteBuffer dataBuffer = ByteBuffer.allocateDirect(0);
+
+    /** View of {@link #dataBuffer} passed to native code; rebuilt whenever that buffer is reallocated. */
     protected MemorySegment dataSegment = MemorySegment.ofBuffer(dataBuffer);
+
+    /** Owns the upcall stubs; closed during cleanup. */
     protected final Arena arena = Arena.ofShared();
+
     private final CallHandlerOnMatch callHandler = new CallHandlerOnMatch();
+
+    /** Bridges the batched native callback to the current {@link BatchedMatchHandler}. */
     protected final BatchCallHandler batchCallHandler = new BatchCallHandler();
+
+    /** Upcall stub invoked once per match, backing the plain {@link MatchHandler} path. */
     protected final MemorySegment funcPtr;
+
+    /** Upcall stub invoked once per batch, backing the {@link BatchedMatchHandler} path. */
     protected final MemorySegment batchFuncPtr;
+
+    /** The compiled pattern database this scanner scans against. */
     protected final Database database;
+
+    /** Native scratch space, private to this scanner and mutated by every scan call. */
     protected final MemorySegment scratchNative;
+
+    /** Native context holding the match-collection buffer used by the batched path. */
     protected final MemorySegment collectMatchCtx;
+
     private int batchBufferCapacity = 0;
     private final Cleaner.Cleanable cleanable;
 
@@ -119,6 +139,12 @@ abstract class Scanner implements AutoCloseable {
         }
     }
 
+    /**
+     * Ensures {@link #dataBuffer} can hold at least {@code requiredSize} bytes, reallocating it and
+     * {@link #dataSegment} if it cannot.
+     *
+     * @param requiredSize number of bytes the next scan needs to stage
+     */
     protected void ensureDataBuffer(int requiredSize) {
         if (requiredSize > dataBuffer.capacity()) {
             dataBuffer = ByteBuffer.allocateDirect(requiredSize);
@@ -126,10 +152,21 @@ abstract class Scanner implements AutoCloseable {
         }
     }
 
+    /**
+     * Installs the handler that the per-match upcall will forward to on the next scan.
+     *
+     * @param handler callback invoked for each match
+     */
     protected void setHandler(MatchHandler handler) {
         this.callHandler.handler = handler;
     }
 
+    /**
+     * Installs the batched handler for the next scan, growing the native match buffer first if the
+     * requested batch size exceeds its current capacity.
+     *
+     * @param handler batch size plus the callback invoked once per collected batch
+     */
     protected void setBulkHandler(BatchedMatchHandler handler) {
         this.batchCallHandler.batchedMatchHandler = handler;
         if (handler.batchSize() > batchBufferCapacity) {
@@ -160,6 +197,14 @@ abstract class Scanner implements AutoCloseable {
         scan(data.getBytes(StandardCharsets.UTF_8), handler);
     }
 
+    /**
+     * Convenience overload so a {@link MatchHandler} lambda resolves without a cast; delegates to
+     * {@link #scan(String, ScanHandler)}.
+     *
+     * @param data text to scan
+     * @param handler callback invoked for each match; return {@code true} to continue scanning,
+     *                {@code false} to stop early
+     */
     public void scan(String data, MatchHandler handler) {
         scan(data, (ScanHandler) handler);
     }
@@ -179,6 +224,14 @@ abstract class Scanner implements AutoCloseable {
         scan(dataSegment, dataBuffer.remaining(), handler);
     }
 
+    /**
+     * Convenience overload so a {@link MatchHandler} lambda resolves without a cast; delegates to
+     * {@link #scan(byte[], ScanHandler)}.
+     *
+     * @param data input bytes
+     * @param handler callback invoked for each match; return {@code true} to continue scanning,
+     *                {@code false} to stop early
+     */
     public void scan(byte[] data, MatchHandler handler) {
         scan(data, (ScanHandler) handler);
     }
@@ -200,6 +253,16 @@ abstract class Scanner implements AutoCloseable {
         scan(ByteBuffer.wrap(data, offset, length), handler);
     }
 
+    /**
+     * Convenience overload so a {@link MatchHandler} lambda resolves without a cast; delegates to
+     * {@link #scan(byte[], int, int, ScanHandler)}.
+     *
+     * @param data input bytes
+     * @param offset start index in {@code data}
+     * @param length number of bytes to scan
+     * @param handler callback invoked for each match; return {@code true} to continue scanning,
+     *                {@code false} to stop early
+     */
     public void scan(byte[] data, int offset, int length, MatchHandler handler) {
         scan(data, offset, length, (ScanHandler) handler);
     }
@@ -228,6 +291,14 @@ abstract class Scanner implements AutoCloseable {
         }
     }
 
+    /**
+     * Convenience overload so a {@link MatchHandler} lambda resolves without a cast; delegates to
+     * {@link #scan(ByteBuffer, ScanHandler)}.
+     *
+     * @param buf input buffer
+     * @param handler callback invoked for each match; return {@code true} to continue scanning,
+     *                {@code false} to stop early
+     */
     public void scan(ByteBuffer buf, MatchHandler handler) {
         scan(buf, (ScanHandler) handler);
     }
@@ -239,11 +310,19 @@ abstract class Scanner implements AutoCloseable {
      * this scanner's compiled database. Implementations call into native vectorscan and forward match
      * callbacks to {@code handler}.
      *
+     * @param dataSegment memory region containing the bytes to scan
+     * @param length number of bytes to scan, starting at the beginning of {@code dataSegment}
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
      */
     protected abstract void scan(MemorySegment dataSegment, int length, ScanHandler handler);
 
+    /**
+     * Returns the size of this scanner's native scratch space.
+     *
+     * @return scratch size in bytes
+     * @throws VectorscanException if the native call fails
+     */
     public long getScratchSize() {
         try (Arena temp = Arena.ofConfined()) {
             MemorySegment scratchSize = temp.allocate(C_LONG, 1);

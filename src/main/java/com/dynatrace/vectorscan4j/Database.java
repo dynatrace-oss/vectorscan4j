@@ -51,9 +51,15 @@ import java.util.List;
 public class Database implements AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
     private volatile boolean closed = false;
+    /** The compiled database in native memory, as returned by {@code hs_compile_multi}. */
     protected final MemorySegment dbNative;
+
+    /** The vectorscan execution mode this database was compiled for, as its native flag value. */
     protected final int modeNative;
+
+    /** The expressions this database was compiled from; their order defines the reported match ids. */
     protected final List<Expression> expressions;
+
     private final ExecutionMode mode;
     private final Cleaner.Cleanable cleanable;
 

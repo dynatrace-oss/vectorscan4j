@@ -28,6 +28,8 @@ import java.nio.ByteBuffer;
 @FunctionalInterface
 public interface BatchHandler {
     /**
+     * Handles one batch of collected matches.
+     *
      * @param buf the collected matches, in FIFO order
      * @param nMatches how many matches {@code buf} holds
      * @return {@code true} to continue scanning, {@code false} to stop early

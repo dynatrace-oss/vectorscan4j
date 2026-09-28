@@ -15,6 +15,7 @@
 */
 package com.dynatrace.vectorscan4j.constants;
 
+/** Status codes returned by native vectorscan calls. */
 public enum ErrorCode {
     /** The engine completed normally. */
     HS_SUCCESS(0),
@@ -88,6 +89,11 @@ public enum ErrorCode {
         this.code = code;
     }
 
+    /**
+     * Returns the numeric value vectorscan uses for this code.
+     *
+     * @return the native error code
+     */
     public int getCode() {
         return code;
     }

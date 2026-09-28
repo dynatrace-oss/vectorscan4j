@@ -15,4 +15,15 @@
 */
 package com.dynatrace.vectorscan4j;
 
+/**
+ * Marker for the ways a scan can deliver matches. Every {@code scan} call takes one of the three
+ * permitted implementations:
+ *
+ * <ul>
+ *   <li>{@link MatchHandler} — a Java callback invoked once per match
+ *   <li>{@link BatchedMatchHandler} — matches collected natively and delivered a batch at a time,
+ *       trading early-stop latency for fewer upcalls
+ *   <li>{@link NativeMatchHandler} — a native callback, avoiding upcalls into the JVM entirely
+ * </ul>
+ */
 public sealed interface ScanHandler permits MatchHandler, BatchedMatchHandler, NativeMatchHandler {}

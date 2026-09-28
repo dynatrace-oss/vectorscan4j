@@ -147,6 +147,8 @@ public enum PatternFlag {
      * to be used on the sub-expressions in logical combinations.
      */
     QUIET(1024);
+
+    /** The bit value vectorscan uses for this flag. */
     public final int value;
 
     PatternFlag(int value) {

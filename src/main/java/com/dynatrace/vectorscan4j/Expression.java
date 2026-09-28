@@ -19,7 +19,20 @@ import com.dynatrace.vectorscan4j.constants.PatternFlag;
 import java.io.Serializable;
 import java.util.EnumSet;
 
+/**
+ * A single pattern to compile into a {@link Database}, together with the flags that modify how it is
+ * matched. An expression's index within the list passed to the database determines the id reported
+ * for its matches.
+ *
+ * @param pattern the regular expression, in vectorscan's PCRE-like syntax
+ * @param flags flags modifying how the pattern is compiled and matched
+ */
 public record Expression(String pattern, EnumSet<PatternFlag> flags) implements Serializable {
+    /**
+     * Creates an expression with no flags.
+     *
+     * @param pattern the regular expression, in vectorscan's PCRE-like syntax
+     */
     public Expression(String pattern) {
         this(pattern, EnumSet.noneOf(PatternFlag.class));
     }
