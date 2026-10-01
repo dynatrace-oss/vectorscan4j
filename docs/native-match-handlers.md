@@ -31,7 +31,7 @@ symbols from it. For the name `Counter`:
 
 | symbol | signature | required |
 |---|---|---|
-| `Counter_init` | `void *(void)` | no |
+| `Counter_init` | `void *(void *)` | no |
 | `Counter_on_match` | `int (unsigned int, unsigned long long, unsigned long long, unsigned int, void *)` | **yes** |
 | `Counter_free` | `void (void *)` | no |
 | `Counter_state` | `void *(void *)` | no |
@@ -40,7 +40,8 @@ Semantics:
 
 - `_init` is called once when the `NativeMatchHandler` is constructed. Whatever pointer it returns
   becomes the `context` argument passed to every `_on_match` call. If the symbol is absent, the
-  context is `NULL`.
+  context is `NULL`. Its own argument is whatever pointer was passed to the three-argument
+  `NativeMatchHandler` constructor, or `NULL` — see [Passing setup data in](#passing-setup-data-in).
 - `_on_match` is called once per match, with the pattern id, the start and end offsets, the match
   flags, and the context. Return `0` to continue scanning, non-zero to stop early — vectorscan then
   returns `HS_SCAN_TERMINATED`, which the Java side treats as a normal completion.
@@ -80,8 +81,8 @@ private:
 VS4J_REGISTER_HANDLER(Counter)
 ```
 
-That is the whole handler. `VS4J_REGISTER_HANDLER` emits `Counter_init`, `Counter_on_match` and
-`Counter_free`, using the class name itself as the symbol prefix.
+That is the whole handler. `VS4J_REGISTER_HANDLER` emits `Counter_init`, `Counter_on_match`,
+`Counter_free` and `Counter_state`, using the class name itself as the symbol prefix.
 
 The shim has to be generated rather than hand-written because a C++ member function can never be
 given C linkage — member names are always mangled, and the mangling is compiler- and ABI-specific.
@@ -107,7 +108,7 @@ The macro does not turn your class into anything static. `Counter` stays an ordi
 the generated functions are stateless — the instance lives behind the `context` pointer:
 
 ```
-Counter_init()            ->  new Counter()                              a fresh heap object
+Counter_init(arg)         ->  new Counter(), then configure(arg)         a fresh heap object
 Counter_on_match(…, ctx)  ->  static_cast<Counter*>(ctx)->on_match(…)    called on that object
 Counter_free(ctx)         ->  delete static_cast<Counter*>(ctx)
 ```
@@ -230,6 +231,47 @@ extern "C" unsigned long long Timer_elapsedNanos(void *context) noexcept {
 
 Mark it `noexcept` for the same reason the generated entry points are: it is called from the JVM
 through a downcall, which cannot unwind a C++ exception.
+
+### Passing setup data in
+
+`configure()` is the mirror of `state()`: Java hands a pointer in at construction, the handler reads
+what it needs, and the default ignores it. Override it when your handler needs setup data:
+
+```cpp
+struct CounterConfig {
+    int32_t maxId;
+};
+
+class Counter : public vs4j::MatchHandler {
+public:
+    void configure(void *arg) override {
+        if (arg) {
+            maxId_ = static_cast<const CounterConfig *>(arg)->maxId;
+        }
+    }
+    // ...
+private:
+    int32_t maxId_ = -1;
+};
+```
+
+```java
+MemorySegment config = arena.allocate(ValueLayout.JAVA_INT);
+config.set(ValueLayout.JAVA_INT, 0L, 5);
+
+try (NativeMatchHandler handler = new NativeMatchHandler(lib, "Counter", config)) {
+    scanner.scan(input, handler);
+}
+```
+
+A single `void *` rather than real parameters, because Java builds the `FunctionDescriptor` for
+`_init` itself and cannot discover a signature — so the arity is fixed by the contract. Pack several
+values into a standard-layout struct and pass a pointer to it, exactly as `state()` hands one back.
+
+`configure()` runs once, inside `_init`, immediately after the handler is constructed. The segment
+only has to outlive that call; if the handler keeps the pointer rather than copying what it points
+at, the segment has to outlive the handler. The two-argument constructor passes `NULL`, so a handler
+that never overrides `configure()` needs no change.
 
 ### Reading a whole state struct
 
@@ -374,7 +416,7 @@ int Stateless_on_match(unsigned int id,
 For a stateful handler in C, allocate in `_init` and release in `_free`:
 
 ```c
-void *Counter_init(void) {
+void *Counter_init(void *arg) {            /* arg is unused here */
     unsigned long long *n = calloc(1, sizeof *n);
     return n;
 }
@@ -397,4 +439,4 @@ the signatures become your responsibility.
 - [`NativeMatchHandler`](../src/main/java/com/dynatrace/vectorscan4j/NativeMatchHandler.java) — the Java API
 - [`vs4j_handler.h`](../src/main/resources/native/vs4j_handler.h) — the C++ support header
 - [`NativeMatchHandlerTests`](../src/test/java/com/dynatrace/vectorscan4j/NativeMatchHandlerTests.java) — worked examples
-- [`count-matches-native.cpp`](../src/test/native/count-matches-native.cpp) — the test handlers, including a hand-written stateless one
+- [`count-matches-native.cpp`](../src/test/resources/native/count-matches-native.cpp) — the test handlers, including a hand-written stateless one

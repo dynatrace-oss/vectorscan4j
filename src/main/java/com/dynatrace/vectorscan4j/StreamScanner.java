@@ -75,6 +75,7 @@ public class StreamScanner extends Scanner {
             case MatchHandler h -> scan(dataSegment, length, h);
             case BatchedMatchHandler h -> scan(dataSegment, length, h);
             case NativeMatchHandler h -> scan(dataSegment, length, h);
+            default -> throw new RuntimeException();
         }
     }
 

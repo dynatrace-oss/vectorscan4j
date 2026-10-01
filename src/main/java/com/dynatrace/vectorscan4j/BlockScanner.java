@@ -54,6 +54,7 @@ public class BlockScanner extends Scanner {
             case MatchHandler h -> scan(dataSegment, length, h);
             case BatchedMatchHandler h -> scan(dataSegment, length, h);
             case NativeMatchHandler h -> scan(dataSegment, length, h);
+            case NativeMatchHandler2 h -> scan(dataSegment, length, h);
         }
     }
 
@@ -135,5 +136,21 @@ public class BlockScanner extends Scanner {
         if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
             throw new VectorscanException(ans);
         }
+    }
+
+    private void scan(MemorySegment dataSegment, int length, NativeMatchHandler2 handler2) {
+        handler2.preScan();
+        int ans = hs_scan(
+                this.database.dbNative,
+                dataSegment,
+                length,
+                0,
+                scratchNative,
+                handler2.nativeOnMatch,
+                handler2.context());
+        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
+            throw new VectorscanException(ans);
+        }
+        handler2.postScan();
     }
 }

@@ -24,20 +24,19 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
-import java.lang.foreign.Arena;
-import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.MemoryLayout;
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.SymbolLookup;
-import java.lang.foreign.ValueLayout;
+import com.dynatrace.vectorscan4j.native_match_handlers.NativeBatchHandler;
+import com.dynatrace.vectorscan4j.native_match_handlers.NativeCollectMatches;
+import java.io.IOException;
+import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -50,19 +49,69 @@ import org.junit.jupiter.api.Test;
  * and {@code stateless}, which returns without doing anything.
  */
 public class NativeMatchHandlerTests {
+    private static final Path NATIVE_DIR = Path.of(System.getProperty("user.dir"), "src/test/resources/native");
+    private static final Path HEADER_DIR = Path.of(System.getProperty("user.dir"), "src/main/resources/native");
+    private static final Path HEADER = HEADER_DIR.resolve("vs4j_handler.h");
+
     static Path libPath;
 
     /**
-     * Resolves the test-only native callback library, aborting the whole class if it is not there.
-     * The assumption lives here rather than in a static initialiser because a {@code TestAbortedException}
-     * thrown during class initialisation surfaces as {@code ExceptionInInitializerError} instead of a skip.
+     * Compiles every {@code .cpp} file in {@value #NATIVE_DIR} into a {@code .so} of the same name,
+     * skipping any file whose {@code .so} is already newer than both the source and
+     * {@code vs4j_handler.h}. Aborts the whole class (rather than failing it) if {@code c++} is
+     * unavailable or a compile fails -- this lives in {@code @BeforeAll} rather than a static
+     * initialiser because a {@code TestAbortedException} thrown there surfaces as
+     * {@code ExceptionInInitializerError} instead of a clean skip.
      */
     @BeforeAll
-    static void requireNativeCallbackLibrary() {
-        String lib = System.getProperty("vs4j.native.countMatches");
-        assumeTrue(lib != null && !lib.isBlank(), "Native callback test library not configured.");
-        libPath = Path.of(lib);
-        assumeTrue(Files.isRegularFile(libPath), "Native callback test library not built: " + libPath);
+    static void buildNativeCallbacks() throws IOException, InterruptedException {
+        boolean hasCxx;
+        try {
+            hasCxx = new ProcessBuilder("c++", "--version")
+                            .redirectErrorStream(true)
+                            .start()
+                            .waitFor()
+                    == 0;
+        } catch (IOException e) {
+            hasCxx = false;
+        }
+        assumeTrue(hasCxx, "c++ not available; native-callback tests will be skipped.");
+
+        try (Stream<Path> files = Files.list(NATIVE_DIR)) {
+            for (Path cpp : files.filter(p -> p.toString().endsWith(".cpp")).toList()) {
+                Path so = NATIVE_DIR.resolve(cpp.getFileName().toString().replace(".cpp", ".so"));
+                if (isUpToDate(so, cpp)) {
+                    continue;
+                }
+                Process proc = new ProcessBuilder(
+                                "c++",
+                                "-std=c++17",
+                                "-O3",
+                                "-fPIC",
+                                "-shared",
+                                "-I",
+                                HEADER_DIR.toString(),
+                                cpp.toString(),
+                                "-o",
+                                so.toString())
+                        .inheritIO()
+                        .start();
+                assumeTrue(
+                        proc.waitFor() == 0,
+                        "Failed to compile " + cpp.getFileName() + "; native-callback tests will be skipped.");
+            }
+        }
+
+        libPath = NATIVE_DIR.resolve("count-matches-native.so");
+    }
+
+    private static boolean isUpToDate(Path so, Path cpp) throws IOException {
+        if (!Files.isRegularFile(so)) {
+            return false;
+        }
+        FileTime soTime = Files.getLastModifiedTime(so);
+        return soTime.compareTo(Files.getLastModifiedTime(cpp)) > 0
+                && (!Files.isRegularFile(HEADER) || soTime.compareTo(Files.getLastModifiedTime(HEADER)) > 0);
     }
 
     /** Reads a field of a {@code Counter} handler's state struct. */
@@ -154,13 +203,6 @@ public class NativeMatchHandlerTests {
     }
 
     @Test
-    void canDelete() {
-        Arena arena = Arena.ofConfined();
-        SymbolLookup lookup = SymbolLookup.libraryLookup(libPath, arena);
-        var method = lookup.find("Counter_on_match").orElseThrow();
-    }
-
-    @Test
     void nativeCallbackCountsSameAsJavaCallback() {
         byte[] input = "the quick brown fox jumps over the lazy dog. the the the.".getBytes(StandardCharsets.UTF_8);
         List<Expression> exprs = List.of(new Expression("the"));
@@ -197,10 +239,51 @@ public class NativeMatchHandlerTests {
 
     /** Resolves the handler's {@code CounterState} through the exported {@code Counter_state} pointer. */
     private static MemorySegment stateOf(NativeMatchHandler handler, Arena arena) throws Throwable {
-        MemorySegment fn = SymbolLookup.libraryLookup(libPath, arena).findOrThrow("Counter_state");
+        return stateOf(handler, arena, "Counter");
+    }
+
+    private static MemorySegment stateOf(NativeMatchHandler handler, Arena arena, String prefix) throws Throwable {
+        MemorySegment fn = SymbolLookup.libraryLookup(libPath, arena).findOrThrow(prefix + "_state");
         MethodHandle state = Linker.nativeLinker()
                 .downcallHandle(fn, FunctionDescriptor.of(ValueLayout.ADDRESS, ValueLayout.ADDRESS));
         return ((MemorySegment) state.invoke(handler.context())).reinterpret(COUNTER_STATE.byteSize());
+    }
+
+    @Test
+    void initArgIsPassedToConfigure() throws Throwable {
+        List<Expression> exprs = List.of(new Expression("aa"), new Expression("bb"));
+        try (Database db = new Database(exprs, BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db);
+                Arena arena = Arena.ofConfined()) {
+
+            // CounterConfig { int32_t maxId } -- only ids <= maxId are counted.
+            MemorySegment config = arena.allocate(ValueLayout.JAVA_INT);
+            config.set(ValueLayout.JAVA_INT, 0L, 0); // id 0 is "aa", id 1 is "bb"
+
+            try (NativeMatchHandler handler = new NativeMatchHandler(libPath, "Configured", config)) {
+                scanner.scan("aa bb aa bb", handler);
+                assertEquals(
+                        2L,
+                        (long) STATE_MATCHES.get(stateOf(handler, arena, "Configured"), 0L),
+                        "only the two 'aa' matches should be counted");
+            }
+        }
+    }
+
+    @Test
+    void omittedInitArgReachesConfigureAsNull() throws Throwable {
+        try (Database db = new Database(List.of(new Expression("aa")), BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db);
+                Arena arena = Arena.ofConfined();
+                // two-arg constructor: configure() sees null and leaves maxId at its default
+                NativeMatchHandler handler = new NativeMatchHandler(libPath, "Configured")) {
+
+            scanner.scan("aa aa", handler);
+            assertEquals(
+                    0L,
+                    (long) STATE_MATCHES.get(stateOf(handler, arena, "Configured"), 0L),
+                    "unconfigured, maxId stays -1 so nothing is counted");
+        }
     }
 
     @Test
@@ -329,5 +412,84 @@ public class NativeMatchHandlerTests {
                 assertEquals(javaCount, countOf(handler), "native stream callback must observe same matches as Java");
             }
         }
+    }
+
+    @Test
+    void nativePrintHandler() {
+        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_print_handler.so");
+        NativeMatchHandler2 handler = new NativeMatchHandler2(tempPath);
+        List<Expression> exprs = List.of(new Expression("pattern1"));
+        Database db = new Database(exprs, BLOCK_MODE);
+        BlockScanner scanner = new BlockScanner(db);
+        scanner.scan("Here is pattern1. You should get 1 match.", handler);
+        handler.close();
+    }
+
+    @Test
+    void nativeCountMatches() {
+        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_count_matches.so");
+        NativeMatchHandler2 handler = new NativeMatchHandler2(tempPath);
+        assertEquals(0, handler.context().get(ValueLayout.JAVA_INT, 0));
+        List<Expression> exprs = List.of(new Expression("pattern1"));
+        Database db = new Database(exprs, BLOCK_MODE);
+        BlockScanner scanner = new BlockScanner(db);
+        scanner.scan("Here is pattern1. You should get 1 match.", handler);
+        assertEquals(1, handler.context().get(ValueLayout.JAVA_INT, 0));
+        scanner.scan("Here is pattern1. You should get 1 match.", handler);
+        assertEquals(2, handler.context().get(ValueLayout.JAVA_INT, 0));
+        handler.close();
+    }
+
+    @Test
+    void contextThrowsAfterClose() {
+        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_count_matches.so");
+        NativeMatchHandler2 handler = new NativeMatchHandler2(tempPath);
+        List<Expression> exprs = List.of(new Expression("pattern1"));
+        Database db = new Database(exprs, BLOCK_MODE);
+        BlockScanner scanner = new BlockScanner(db);
+        scanner.scan("Here is pattern1. You should get 1 match.", handler);
+
+        assertDoesNotThrow(() -> handler.context().get(ValueLayout.JAVA_INT, 0));
+        assertEquals(1, handler.context().get(ValueLayout.JAVA_INT, 0));
+        handler.close(); // frees the native context and unloads the library
+
+        // Reading context() after close() must fail fast rather than silently return stale or
+        // freed memory: close() frees the native object, so this is a use-after-free otherwise.
+        assertThrows(IllegalStateException.class, () -> handler.context().get(ValueLayout.JAVA_INT, 0));
+    }
+
+    @Test
+    void nativeCollectMatches() {
+        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_collect_matches.so");
+        NativeCollectMatches handler = new NativeCollectMatches(tempPath);
+
+        assertEquals(0, handler.getInt("count"));
+        assertEquals(1, handler.getInt("capacity"));
+        List<Expression> exprs = List.of(new Expression("pattern1"));
+        Database db = new Database(exprs, BLOCK_MODE);
+        BlockScanner scanner = new BlockScanner(db);
+        scanner.scan("Here is pattern1. You should get 1 match.", handler);
+        assertEquals(1, handler.count());
+        assertEquals(1, handler.capacity());
+        scanner.scan("Here is pattern1. You should get 1 match.", handler);
+        assertEquals(2, handler.count());
+        assertEquals(2, handler.capacity());
+        scanner.scan("Here is pattern1. You should get 1 match.", handler);
+        assertEquals(3, handler.count());
+        assertEquals(4, handler.capacity());
+        handler.close();
+    }
+
+    @Test
+    void nativeBatchHandler() {
+        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_batch_handler.so");
+
+        NativeBatchHandler handler = new NativeBatchHandler(tempPath, 4);
+        // List<Expression> exprs = List.of(new Expression("pattern1"));
+        // Database db = new Database(exprs, BLOCK_MODE);
+        // BlockScanner scanner = new BlockScanner(db);
+        // scanner.scan("Here is pattern1. You should get 1 match.", handler);
+        handler.close();
+        // scanner.close();
     }
 }

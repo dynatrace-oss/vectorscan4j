@@ -33,13 +33,22 @@ public:
     virtual void *state() {
         return nullptr;
     }
+
+    /**
+     * Optional. Receives the pointer Java passed at construction, for handlers that need setup data.
+     * Pack several values into a standard-layout struct and pass a pointer to it; this is state() in
+     * the opposite direction. The default ignores the argument, which is null when Java passed none.
+     */
+    virtual void configure(void *arg) {
+        (void) arg;
+    }
 };
 
 } // namespace vs4j
 
 /**
  * Emits Type_init / Type_on_match / Type_free / Type_state, using Type's own name as the symbol
- * prefix.
+ * prefix. Type_init forwards its argument to configure(), which by default ignores it.
  * Place this at global scope in the same translation unit as Type.
  *
  * Type must be a class deriving from vs4j::MatchHandler, concrete, and default-constructible;
@@ -47,7 +56,7 @@ public:
  * identifier, because it is pasted into the symbol names -- register a namespaced class
  * through a global alias (using Q = ns::Q) instead.
  *
- * All three entry points are noexcept: they are called across boundaries that cannot unwind a
+ * All the entry points are noexcept: they are called across boundaries that cannot unwind a
  * C++ exception, so an escaping one becomes a deterministic std::terminate rather than
  * undefined behaviour. To stop the scan instead of aborting, catch inside your own on_match
  * and return non-zero.
@@ -59,8 +68,10 @@ public:
                   #Type " must implement on_match; it is still abstract");             \
     static_assert(std::is_default_constructible<Type>::value,                          \
                   #Type " must be default-constructible; the macro creates it with new Type()"); \
-    extern "C" void *Type##_init(void) noexcept {                                      \
-        return new Type();                                                             \
+    extern "C" void *Type##_init(void *arg) noexcept {                                 \
+        Type *handler = new Type();                                                    \
+        handler->configure(arg);                                                       \
+        return handler;                                                                \
     }                                                                                  \
     extern "C" int Type##_on_match(unsigned int id,                                    \
                                    unsigned long long from,                            \

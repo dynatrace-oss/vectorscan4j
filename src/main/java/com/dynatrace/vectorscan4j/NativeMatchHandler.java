@@ -37,7 +37,7 @@ import java.util.Objects;
  */
 public final class NativeMatchHandler implements ScanHandler, AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
-    private static final FunctionDescriptor INIT_DESC = FunctionDescriptor.of(C_POINTER);
+    private static final FunctionDescriptor INIT_DESC = FunctionDescriptor.of(C_POINTER, C_POINTER);
     private static final FunctionDescriptor FREE_DESC = FunctionDescriptor.ofVoid(C_POINTER);
 
     final MemorySegment nativeOnMatch;
@@ -56,7 +56,26 @@ public final class NativeMatchHandler implements ScanHandler, AutoCloseable {
      *     or if {@code name_on_match} cannot be resolved
      */
     public NativeMatchHandler(Path libraryPath, String name) {
+        this(libraryPath, name, MemorySegment.NULL);
+    }
+
+    /**
+     * As {@link #NativeMatchHandler(Path, String)}, passing {@code initArg} to {@code name_init}.
+     *
+     * <p>The handler receives it by overriding {@code configure(void *)}; pack several values into a
+     * standard-layout struct and pass a pointer to it. The segment must stay alive for the duration of
+     * the {@code _init} call, and longer if the handler retains what it points at.
+     *
+     * @param libraryPath shared library containing the entry points
+     * @param name symbol prefix — the handler's class name
+     * @param initArg pointer handed to {@code name_init}, or {@link MemorySegment#NULL} for none
+     * @throws NullPointerException if any argument is null
+     * @throws IllegalArgumentException if {@code name} is blank, if the library cannot be opened,
+     *     or if {@code name_on_match} cannot be resolved
+     */
+    public NativeMatchHandler(Path libraryPath, String name, MemorySegment initArg) {
         Objects.requireNonNull(libraryPath, "libraryPath must not be null");
+        Objects.requireNonNull(initArg, "initArg must not be null; use MemorySegment.NULL for none");
         Objects.requireNonNull(name, "name must not be null");
         if (name.isBlank()) {
             // A blank prefix could only ever resolve "_on_match", which is a reserved identifier
@@ -67,7 +86,7 @@ public final class NativeMatchHandler implements ScanHandler, AutoCloseable {
         try {
             SymbolLookup lookup = SymbolLookup.libraryLookup(libraryPath, arena);
             this.nativeOnMatch = resolveOnMatch(lookup, name);
-            this.context = callInit(lookup, name);
+            this.context = callInit(lookup, name, initArg);
             this.cleanable = CLEANER.register(this, new CleanupState(freeHandle(lookup, name), context, arena));
         } catch (RuntimeException e) {
             arena.close();
@@ -81,14 +100,14 @@ public final class NativeMatchHandler implements ScanHandler, AutoCloseable {
                         + "_on_match. A native match handler must at least provide an on_match entry point."));
     }
 
-    private static MemorySegment callInit(SymbolLookup lookup, String name) {
+    private static MemorySegment callInit(SymbolLookup lookup, String name, MemorySegment initArg) {
         MemorySegment init = lookup.find(name + "_init").orElse(null);
         if (init == null) {
             return MemorySegment.NULL;
         }
         try {
             return (MemorySegment)
-                    Linker.nativeLinker().downcallHandle(init, INIT_DESC).invoke();
+                    Linker.nativeLinker().downcallHandle(init, INIT_DESC).invoke(initArg);
         } catch (Throwable t) {
             throw new IllegalStateException("Call to " + name + "_init failed", t);
         }

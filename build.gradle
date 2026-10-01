@@ -45,8 +45,6 @@ tasks.withType(Test).configureEach {
     jvmArgs = [
             "--enable-native-access=ALL-UNNAMED"
     ]
-    systemProperty "vs4j.native.countMatches",
-            layout.buildDirectory.file("native/libvs4j_count_matches.so").get().asFile.absolutePath
 }
 
 // Generate Java bindings from a C/C++ header using jextract.
@@ -124,27 +122,10 @@ tasks.register('buildCollectMatch', Exec) {
     tasks.named(consumer).configure { mustRunAfter 'buildCollectMatch' }
 }
 
-// Build a tiny native shared library used by tests that exercise the
-// no-upcall scan path (see NativeMatchHandler). Skipped silently if cc is missing.
-tasks.register('buildTestNativeCallback', Exec) {
-    def srcDir = file("src/test/native")
-    def outDir = layout.buildDirectory.dir("native").get().asFile
-    def headerDir = file("src/main/resources/native")
-    inputs.dir(srcDir)
-    inputs.file("${headerDir}/vs4j_handler.h")
-    outputs.dir(outDir)
-    doFirst { outDir.mkdirs() }
-    ignoreExitValue = true
-    commandLine 'sh', '-c',
-            "command -v c++ >/dev/null 2>&1 && " +
-            "c++ -std=c++17 -O3 -fPIC -shared " +
-            "-I ${headerDir} " +
-            "-o ${outDir}/libvs4j_count_matches.so " +
-            "${srcDir}/count-matches-native.cpp || " +
-            "echo 'c++ not available or build failed; native-callback tests will be skipped.'"
-}
-
-tasks.named('test').configure { dependsOn 'buildTestNativeCallback' }
+// The native callback libraries used by NativeMatchHandlerTests are no longer built as a Gradle
+// task: that made every `test` invocation compile them regardless of which tests were selected.
+// NativeMatchHandlerTests.buildNativeCallbacks() now compiles them itself in @BeforeAll, only when
+// that class actually runs, with its own staleness check against the .cpp files and vs4j_handler.h.
 
 spotless {
     java {
@@ -163,11 +144,13 @@ tasks.named("jar") {
     }
     exclude("native/vectorscan.h")
     exclude("native/CMakeLists.txt")
+    exclude("native/collect_match_legacy.cpp")
 }
 
 tasks.named("sourcesJar") {
     exclude("native/vectorscan.h")
     exclude("native/CMakeLists.txt")
+    exclude("native/collect_match_legacy.cpp")
 }
 
 publishing {
