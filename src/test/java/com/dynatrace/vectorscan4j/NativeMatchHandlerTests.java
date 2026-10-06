@@ -16,6 +16,7 @@
 package com.dynatrace.vectorscan4j;
 
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.BLOCK_MODE;
+import static com.dynatrace.vectorscan4j.constants.ExecutionMode.STREAM_MODE;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -24,7 +25,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.dynatrace.vectorscan4j.constants.PatternFlag;
-import com.dynatrace.vectorscan4j.native_match_handlers.NativeCollectMatches;
 import java.io.IOException;
 import java.lang.foreign.*;
 import java.nio.ByteBuffer;
@@ -85,7 +85,7 @@ public class NativeMatchHandlerTests {
                         "Failed to compile " + cpp.getFileName() + "; native-callback tests will be skipped.");
             }
         }
-        libPath = NATIVE_DIR.resolve("native_count_matches.so");
+        libPath = NATIVE_DIR.resolve("native_count_match.so");
     }
 
     private static boolean isUpToDate(Path so, Path cpp) throws IOException {
@@ -132,7 +132,7 @@ public class NativeMatchHandlerTests {
     long javaCount = 0;
 
     void nativePrintHandler() {
-        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_print_handler.so");
+        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_print_match.so");
         NativeMatchHandler handler = new NativeMatchHandler(tempPath);
         List<Expression> exprs = List.of(new Expression("pattern1"));
         Database db = new Database(exprs, BLOCK_MODE);
@@ -143,7 +143,7 @@ public class NativeMatchHandlerTests {
 
     @Test
     void nativeCountMatches() {
-        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_count_matches.so");
+        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_count_match.so");
         NativeMatchHandler handler = new NativeMatchHandler(tempPath);
         assertEquals(0, handler.context().get(ValueLayout.JAVA_INT, 0));
         List<Expression> exprs = List.of(new Expression("pattern1"));
@@ -158,7 +158,7 @@ public class NativeMatchHandlerTests {
 
     @Test
     void contextThrowsAfterClose() {
-        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_count_matches.so");
+        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_count_match.so");
         NativeMatchHandler handler = new NativeMatchHandler(tempPath);
         List<Expression> exprs = List.of(new Expression("pattern1"));
         Database db = new Database(exprs, BLOCK_MODE);
@@ -175,30 +175,7 @@ public class NativeMatchHandlerTests {
     }
 
     @Test
-    void nativeCollectMatches() {
-        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_collect_matches.so");
-        NativeCollectMatches handler = new NativeCollectMatches(tempPath);
-
-        assertEquals(0, handler.getInt("count"));
-        assertEquals(1, handler.getInt("capacity"));
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        Database db = new Database(exprs, BLOCK_MODE);
-        BlockScanner scanner = new BlockScanner(db);
-        scanner.scan("Here is pattern1. You should get 1 match.", handler);
-        assertEquals(1, handler.count());
-        assertEquals(1, handler.capacity());
-        scanner.scan("Here is pattern1. You should get 1 match.", handler);
-        assertEquals(2, handler.count());
-        assertEquals(2, handler.capacity());
-        scanner.scan("Here is pattern1. You should get 1 match.", handler);
-        assertEquals(3, handler.count());
-        assertEquals(4, handler.capacity());
-        handler.close();
-    }
-
-    @Test
     void nativeBatchHandler() {
-        Path lib = NATIVE_DIR.resolve("native_batch_handler.so");
         List<Expression> exprs = List.of(new Expression("pattern1", EnumSet.of(PatternFlag.SOM_LEFTMOST)));
         String input = "pattern1 pattern1 pattern1 pattern1 pattern1";
 
@@ -214,7 +191,7 @@ public class NativeMatchHandlerTests {
 
             List<List<Long>> actual = new ArrayList<>();
             List<Integer> batchSizes = new ArrayList<>();
-            try (NativeBatchHandler handler = new NativeBatchHandler(lib, 2, (buf, n) -> {
+            try (BufferedMatchHandler handler = new BufferedMatchHandler(2, (buf, n) -> {
                 batchSizes.add(n);
                 actual.addAll(decode(buf, n));
                 return true;
@@ -229,11 +206,10 @@ public class NativeMatchHandlerTests {
 
     @Test
     void nativeBatchHandlerStopsEarly() {
-        Path lib = NATIVE_DIR.resolve("native_batch_handler.so");
         try (Database db = new Database(List.of(new Expression("pattern1")), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             List<Integer> batchSizes = new ArrayList<>();
-            try (NativeBatchHandler handler = new NativeBatchHandler(lib, 2, (buf, n) -> {
+            try (BufferedMatchHandler handler = new BufferedMatchHandler(2, (buf, n) -> {
                 batchSizes.add(n);
                 return false;
             })) {
@@ -246,11 +222,10 @@ public class NativeMatchHandlerTests {
 
     @Test
     void nativeBatchHandlerIsReusableAcrossScans() {
-        Path lib = NATIVE_DIR.resolve("native_batch_handler.so");
         try (Database db = new Database(List.of(new Expression("pattern1")), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             List<Integer> batchSizes = new ArrayList<>();
-            try (NativeBatchHandler handler = new NativeBatchHandler(lib, 2, (buf, n) -> {
+            try (BufferedMatchHandler handler = new BufferedMatchHandler(2, (buf, n) -> {
                 batchSizes.add(n);
                 return true;
             })) {
@@ -263,9 +238,24 @@ public class NativeMatchHandlerTests {
     }
 
     @Test
+    void nativeBatchHandlerFlushesRemainderOnStreamScanner() {
+        try (Database db = new Database(List.of(new Expression("pattern1")), STREAM_MODE);
+                StreamScanner scanner = new StreamScanner(db)) {
+            List<Integer> batchSizes = new ArrayList<>();
+            try (BufferedMatchHandler handler = new BufferedMatchHandler(2, (buf, n) -> {
+                batchSizes.add(n);
+                return true;
+            })) {
+                scanner.scan("pattern1 pattern1 pattern1", handler);
+            }
+            // without postScan() the trailing partial batch of 1 would never be delivered
+            assertEquals(List.of(2, 1), batchSizes);
+        }
+    }
+
+    @Test
     void nativeBatchHandlerRejectsNonPositiveBatchSize() {
-        Path lib = NATIVE_DIR.resolve("native_batch_handler.so");
-        assertThrows(IllegalArgumentException.class, () -> new NativeBatchHandler(lib, 0, (buf, n) -> true));
+        assertThrows(IllegalArgumentException.class, () -> new BufferedMatchHandler(0, (buf, n) -> true));
     }
 
     /** Decodes the 12-byte (id, from, to) entries a batch handler receives. */

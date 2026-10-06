@@ -34,37 +34,33 @@ import java.util.Objects;
  */
 public non-sealed class NativeMatchHandler implements ScanHandler, AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
-    public static final FunctionDescriptor INIT_DESC =
+    private static final FunctionDescriptor INIT_DESC =
             FunctionDescriptor.of(VectorscanNative.C_POINTER, VectorscanNative.C_POINTER);
     private static final FunctionDescriptor FREE_DESC = FunctionDescriptor.ofVoid(C_POINTER);
-
-    final MemorySegment nativeOnMatch;
     private final MemorySegment context;
     private final Cleaner.Cleanable cleanable;
+
+    final MemorySegment nativeOnMatch;
 
     public NativeMatchHandler(Path libraryPath) {
         this(libraryPath, MemorySegment.NULL);
     }
 
-    public NativeMatchHandler(Path libraryPath, MemorySegment initCtx) {
+    public NativeMatchHandler(Path libraryPath, MemorySegment initArgs) {
         Objects.requireNonNull(libraryPath, "libraryPath must not be null");
         Arena arena = Arena.ofShared();
         try {
             SymbolLookup lookup = SymbolLookup.libraryLookup(libraryPath, arena);
-            this.nativeOnMatch = resolveOnMatch(lookup);
-            this.context = callInit(lookup, arena, initCtx);
+            this.nativeOnMatch = lookup.find("on_match")
+                    .orElseThrow(
+                            () -> new IllegalArgumentException(
+                                    "Could not resolve required symbol on_match. A native match handler must at least provide an on_match entry point."));
+            this.context = callInit(lookup, arena, initArgs);
             this.cleanable = CLEANER.register(this, new CleanupState(freeHandle(lookup), context, arena));
         } catch (RuntimeException e) {
             arena.close();
             throw e;
         }
-    }
-
-    private static MemorySegment resolveOnMatch(SymbolLookup lookup) {
-        return lookup.find("on_match")
-                .orElseThrow(
-                        () -> new IllegalArgumentException(
-                                "Could not resolve required symbol on_match. A native match handler must at least provide an on_match entry point."));
     }
 
     private static MemorySegment callInit(SymbolLookup lookup, Arena arena, MemorySegment initCtx) {
@@ -74,7 +70,6 @@ public non-sealed class NativeMatchHandler implements ScanHandler, AutoCloseable
         }
         MemorySegment raw;
         try {
-            // call the correct constructor, based on whether there exists an init arg or not
             raw = (MemorySegment)
                     Linker.nativeLinker().downcallHandle(init, INIT_DESC).invokeExact(initCtx);
         } catch (Throwable t) {

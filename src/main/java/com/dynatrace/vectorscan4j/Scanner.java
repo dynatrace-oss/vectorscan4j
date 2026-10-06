@@ -22,13 +22,11 @@ import static com.dynatrace.vectorscan4j.internal.VectorscanNativeShared.C_LONG;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNativeShared.C_POINTER;
 import static java.lang.foreign.ValueLayout.JAVA_LONG;
 
-import com.dynatrace.vectorscan4j.internal.VectorscanBatchedMatchHandler;
 import com.dynatrace.vectorscan4j.internal.VectorscanMatchHandler;
 import java.lang.foreign.Arena;
 import java.lang.foreign.MemorySegment;
 import java.lang.ref.Cleaner;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 
 /**
@@ -52,14 +50,8 @@ abstract class Scanner implements AutoCloseable {
 
     private final CallHandlerOnMatch callHandler = new CallHandlerOnMatch();
 
-    /** Bridges the batched native callback to the current {@link BatchedMatchHandler}. */
-    protected final BatchCallHandler batchCallHandler = new BatchCallHandler();
-
     /** Upcall stub invoked once per match, backing the plain {@link MatchHandler} path. */
     protected final MemorySegment funcPtr;
-
-    /** Upcall stub invoked once per batch, backing the {@link BatchedMatchHandler} path. */
-    protected final MemorySegment batchFuncPtr;
 
     /** The compiled pattern database this scanner scans against. */
     protected final Database database;
@@ -76,7 +68,6 @@ abstract class Scanner implements AutoCloseable {
     protected Scanner(Database database) {
         this.database = database;
         this.funcPtr = VectorscanMatchHandler.allocate(callHandler, arena);
-        this.batchFuncPtr = VectorscanBatchedMatchHandler.allocate(batchCallHandler, arena);
         try (Arena temp = Arena.ofConfined()) {
             MemorySegment scratchPtr = temp.allocate(C_POINTER);
             int ans = hs_alloc_scratch(database.dbNative, scratchPtr);
@@ -86,7 +77,6 @@ abstract class Scanner implements AutoCloseable {
             scratchNative = scratchPtr.getAtIndex(C_POINTER, 0);
 
             MemorySegment ctxPtr = temp.allocate(C_POINTER);
-            alloc_context(batchFuncPtr, ctxPtr);
             collectMatchCtx = ctxPtr.getAtIndex(C_POINTER, 0);
         }
 
@@ -99,16 +89,6 @@ abstract class Scanner implements AutoCloseable {
         @Override
         public int apply(int id, long from, long to, int flags, MemorySegment context) {
             return handler.onMatch(id, from, to) ? 0 : 1;
-        }
-    }
-
-    static class BatchCallHandler implements VectorscanBatchedMatchHandler.Function {
-        BatchedMatchHandler batchedMatchHandler;
-        ByteBuffer batchBuffer;
-
-        @Override
-        public int apply(MemorySegment ignored, int count) {
-            return batchedMatchHandler.handler().matchAll(batchBuffer, count) ? 0 : 1;
         }
     }
 
@@ -160,25 +140,6 @@ abstract class Scanner implements AutoCloseable {
      */
     protected void setHandler(MatchHandler handler) {
         this.callHandler.handler = handler;
-    }
-
-    /**
-     * Installs the batched handler for the next scan, growing the native match buffer first if the
-     * requested batch size exceeds its current capacity.
-     *
-     * @param handler batch size plus the callback invoked once per collected batch
-     */
-    protected void setBulkHandler(BatchedMatchHandler handler) {
-        this.batchCallHandler.batchedMatchHandler = handler;
-        if (handler.batchSize() > batchBufferCapacity) {
-            resize_buffer(collectMatchCtx, handler.batchSize());
-            batchBufferCapacity = handler.batchSize();
-            this.batchCallHandler.batchBuffer = collectMatchCtx
-                    .get(C_POINTER, 0)
-                    .reinterpret((long) batchBufferCapacity * 12)
-                    .asByteBuffer()
-                    .order(ByteOrder.nativeOrder());
-        }
     }
 
     // --------------------------- scan function overloads ---------------------------

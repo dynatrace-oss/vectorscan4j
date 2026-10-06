@@ -23,8 +23,7 @@ import java.lang.invoke.MethodHandle;
 
 public class VectorscanNative extends VectorscanNativeShared {
     static {
-        NativeLoader.load("hs");
-        NativeLoader.load("vs4j_collect_match");
+        NativeLoader.load("hs"); // load vectorscan binary
     }
 
     static final SymbolLookup SYMBOL_LOOKUP =

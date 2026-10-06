@@ -18,7 +18,7 @@ package com.dynatrace.vectorscan4j;
 import java.nio.ByteBuffer;
 
 /**
- * Handles a whole batch of collected matches at once. Wrapped by {@link BatchedMatchHandler}, which pairs it
+ * Handles a whole buffer of collected matches at once. Wrapped by {@link BufferedMatchHandler}, which pairs it
  * with the batch size to use.
  *
  * <p>The buffer holds {@code nMatches} entries of 12 bytes each: the pattern id, the start offset and the

@@ -72,7 +72,6 @@ public class StreamScanner extends Scanner {
         }
         return switch (handler) {
             case MatchHandler h -> scan(dataSegment, length, h);
-            case BatchedMatchHandler h -> scan(dataSegment, length, h);
             case NativeMatchHandler h -> scan(dataSegment, length, h);
         };
     }
@@ -99,10 +98,6 @@ public class StreamScanner extends Scanner {
                 hs_scan_stream(streamNative, dataSegment, length, 0, scratchNative, funcPtr, MemorySegment.NULL));
     }
 
-    private boolean scan(MemorySegment dataSegment, int length, BatchedMatchHandler handler) {
-        throw new RuntimeException();
-    }
-
     /**
      * Scans {@code dataSegment} using a <em>native</em> match-event callback supplied by the caller.
      *
@@ -120,8 +115,11 @@ public class StreamScanner extends Scanner {
      *     {@link com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
      */
     private boolean scan(MemorySegment dataSegment, int length, NativeMatchHandler handler) {
-        return completed(hs_scan_stream(
+        handler.preScan();
+        boolean completed = completed(hs_scan_stream(
                 streamNative, dataSegment, length, 0, scratchNative, handler.nativeOnMatch, handler.context()));
+        handler.postScan();
+        return completed;
     }
 
     /**

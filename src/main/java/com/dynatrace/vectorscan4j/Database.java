@@ -113,7 +113,6 @@ public class Database implements AutoCloseable {
                 throw new RuntimeException(String.format("Unable to compile pattern with id %d: %s", exprId, msg));
             }
 
-            // free compile error
             int _ = hs_free_compile_error(errorPtr.getAtIndex(C_POINTER, 0));
             this.dbNative = dbPtr.getAtIndex(C_POINTER, 0);
 

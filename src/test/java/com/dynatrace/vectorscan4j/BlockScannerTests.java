@@ -560,7 +560,7 @@ public class BlockScannerTests {
         }
     }
 
-    static boolean sameMatches(BlockScanner s1, String input, int bulkSize) {
+    static boolean sameMatches(BlockScanner s1, String input, int batchSize) {
         ThreadLocal<Integer> hash = new ThreadLocal<>();
         MatchHandler hashMatch = (id, from, to) -> {
             hash.set(hash.get() ^ Integer.valueOf(id).hashCode());
@@ -568,7 +568,7 @@ public class BlockScannerTests {
             hash.set(hash.get() ^ Long.valueOf(to).hashCode());
             return true;
         };
-        BatchedMatchHandler bulkHashMatch = new BatchedMatchHandler(bulkSize, (buf, nMatches) -> {
+        BufferedMatchHandler batchHandler = new BufferedMatchHandler(batchSize, (buf, nMatches) -> {
             for (int i = 0; i < nMatches; i++) {
                 int b = i * 12;
                 hashMatch.onMatch(buf.getInt(b), buf.getInt(b + 4), buf.getInt(b + 8));
@@ -579,7 +579,7 @@ public class BlockScannerTests {
         s1.scan(input, hashMatch);
         int ans1 = hash.get();
         hash.set(0);
-        s1.scan(input, bulkHashMatch);
+        s1.scan(input, batchHandler);
         int ans2 = hash.get();
         return ans1 == ans2;
     }
@@ -661,11 +661,11 @@ public class BlockScannerTests {
         try (Database db = new Database(List.of(new Expression("pattern1")), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             String threeMatches = "pattern1 pattern1 pattern1";
-            assertTrue(scanner.scan(threeMatches, new BatchedMatchHandler(2, (buf, n) -> true)));
+            assertTrue(scanner.scan(threeMatches, new BufferedMatchHandler(2, (buf, n) -> true)));
             // the first full batch is delivered mid-scan, so returning false there stops the scan
-            assertFalse(scanner.scan(threeMatches, new BatchedMatchHandler(2, (buf, n) -> false)));
+            assertFalse(scanner.scan(threeMatches, new BufferedMatchHandler(2, (buf, n) -> false)));
             // a partial batch is only delivered after the scan has finished, so false there changes nothing
-            assertTrue(scanner.scan("pattern1", new BatchedMatchHandler(2, (buf, n) -> false)));
+            assertTrue(scanner.scan("pattern1", new BufferedMatchHandler(2, (buf, n) -> false)));
         }
     }
 }

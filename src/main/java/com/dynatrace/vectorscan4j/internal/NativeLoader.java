@@ -20,34 +20,55 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
 
-final class NativeLoader {
+/**
+ * Extracts the native libraries bundled under {@code /native/<os>/<arch>/} on the classpath to temporary files,
+ * since a library inside a JAR cannot be loaded in place.
+ */
+public final class NativeLoader {
+    /** Extracted file per library, so each library is copied out at most once per JVM. */
+    private static final Map<String, Path> EXTRACTED = new HashMap<>();
+
     private NativeLoader() {}
 
+    /** Extracts the bundled library and loads it into the JVM, making its symbols visible to {@code loaderLookup()}. */
     public static synchronized void load(String libBaseName) {
-        try {
-            String osName = System.getProperty("os.name");
-            String osArch = System.getProperty("os.arch");
-            Path resourcePath = buildResourcePath(libBaseName, osName, osArch);
+        System.load(extract(libBaseName).toAbsolutePath().toString());
+    }
 
-            try (InputStream is = NativeLoader.class.getResourceAsStream(resourcePath.toString())) {
-                if (is == null) {
-                    throw new RuntimeException("Native library resource not found: " + resourcePath);
-                }
-
-                String mappedName = System.mapLibraryName(libBaseName);
-                // Keep suffix so Linux/Mac identify file type.
-                String suffix = mappedName.contains(".") ? mappedName.substring(mappedName.lastIndexOf('.')) : null;
-                Path temp = Files.createTempFile("native-" + libBaseName + "-", suffix);
-                temp.toFile().deleteOnExit();
-
-                try (OutputStream osOut = Files.newOutputStream(temp)) {
-                    is.transferTo(osOut);
-                }
-                System.load(temp.toAbsolutePath().toString());
+    /**
+     * Extracts the bundled library for the current platform to a temporary file, without loading it.
+     *
+     * @param libBaseName the name without platform prefix or suffix, e.g. {@code "native_batch_handler"} for
+     *     {@code libnative_batch_handler.so}
+     * @return the extracted file, deleted on JVM exit
+     * @throws RuntimeException if no library of that name is bundled for this platform, or it cannot be written
+     */
+    public static synchronized Path extract(String libBaseName) {
+        Path cached = EXTRACTED.get(libBaseName);
+        if (cached != null) {
+            return cached;
+        }
+        Path resourcePath =
+                buildResourcePath(libBaseName, System.getProperty("os.name"), System.getProperty("os.arch"));
+        try (InputStream is = NativeLoader.class.getResourceAsStream(resourcePath.toString())) {
+            if (is == null) {
+                throw new RuntimeException("Native library resource not found: " + resourcePath);
             }
+            String mappedName = System.mapLibraryName(libBaseName);
+            // Keep suffix so Linux/Mac identify file type.
+            String suffix = mappedName.contains(".") ? mappedName.substring(mappedName.lastIndexOf('.')) : null;
+            Path temp = Files.createTempFile("native-" + libBaseName + "-", suffix);
+            temp.toFile().deleteOnExit();
+            try (OutputStream osOut = Files.newOutputStream(temp)) {
+                is.transferTo(osOut);
+            }
+            EXTRACTED.put(libBaseName, temp);
+            return temp;
         } catch (IOException e) {
-            throw new RuntimeException(String.format("Failed to load native library \"%s\"", libBaseName), e);
+            throw new RuntimeException(String.format("Failed to extract native library \"%s\"", libBaseName), e);
         }
     }
 

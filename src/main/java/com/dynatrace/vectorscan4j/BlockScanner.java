@@ -17,7 +17,6 @@ package com.dynatrace.vectorscan4j;
 
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.BLOCK_MODE;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNative.*;
-import static java.lang.foreign.ValueLayout.JAVA_INT;
 
 import java.lang.foreign.MemorySegment;
 
@@ -51,7 +50,6 @@ public class BlockScanner extends Scanner {
         }
         return switch (handler) {
             case MatchHandler h -> scan(dataSegment, length, h);
-            case BatchedMatchHandler h -> scan(dataSegment, length, h);
             case NativeMatchHandler h -> scan(dataSegment, length, h);
         };
     }
@@ -79,26 +77,6 @@ public class BlockScanner extends Scanner {
         setHandler(handler);
         return completed(
                 hs_scan(this.database.dbNative, dataSegment, length, 0, scratchNative, funcPtr, MemorySegment.NULL));
-    }
-
-    private boolean scan(MemorySegment dataSegment, int length, BatchedMatchHandler handler) {
-        setBulkHandler(handler);
-        int ans = hs_scan(
-                this.database.dbNative,
-                dataSegment,
-                length,
-                0,
-                scratchNative,
-                collect_match$address(),
-                collectMatchCtx);
-        boolean completed = completed(ans);
-        // An early stop resets the native count to 0, so this only flushes after a completed scan.
-        int remaining = collectMatchCtx.get(JAVA_INT, 8);
-        if (remaining > 0) {
-            handler.handler().matchAll(batchCallHandler.batchBuffer, remaining);
-            collectMatchCtx.set(JAVA_INT, 8, 0);
-        }
-        return completed;
     }
 
     /**
