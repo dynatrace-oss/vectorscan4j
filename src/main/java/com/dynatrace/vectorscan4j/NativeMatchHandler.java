@@ -17,11 +17,8 @@ package com.dynatrace.vectorscan4j;
 
 import static com.dynatrace.vectorscan4j.internal.VectorscanNativeShared.C_POINTER;
 
-import java.lang.foreign.Arena;
-import java.lang.foreign.FunctionDescriptor;
-import java.lang.foreign.Linker;
-import java.lang.foreign.MemorySegment;
-import java.lang.foreign.SymbolLookup;
+import com.dynatrace.vectorscan4j.internal.VectorscanNative;
+import java.lang.foreign.*;
 import java.lang.invoke.MethodHandle;
 import java.lang.ref.Cleaner;
 import java.nio.file.Path;
@@ -35,86 +32,64 @@ import java.util.Objects;
  * <a href="https://github.com/dynatrace-oss/vectorscan4j/blob/main/docs/native-match-handlers.md">
  * docs/native-match-handlers.md</a>.
  */
-public final class NativeMatchHandler implements ScanHandler, AutoCloseable {
+public non-sealed class NativeMatchHandler implements ScanHandler, AutoCloseable {
     private static final Cleaner CLEANER = Cleaner.create();
-    private static final FunctionDescriptor INIT_DESC = FunctionDescriptor.of(C_POINTER, C_POINTER);
+    public static final FunctionDescriptor INIT_DESC =
+            FunctionDescriptor.of(VectorscanNative.C_POINTER, VectorscanNative.C_POINTER);
     private static final FunctionDescriptor FREE_DESC = FunctionDescriptor.ofVoid(C_POINTER);
 
     final MemorySegment nativeOnMatch;
     private final MemorySegment context;
     private final Cleaner.Cleanable cleanable;
 
-    /**
-     * Opens {@code libraryPath} and binds the {@code name}-prefixed entry points. The library stays
-     * loaded until this handler is closed.
-     *
-     * @param libraryPath shared library containing the entry points
-     * @param name symbol prefix — the handler's class name, for example {@code "Counter"} for
-     *     {@code Counter_on_match}
-     * @throws NullPointerException if {@code libraryPath} or {@code name} is null
-     * @throws IllegalArgumentException if {@code name} is blank, if the library cannot be opened,
-     *     or if {@code name_on_match} cannot be resolved
-     */
-    public NativeMatchHandler(Path libraryPath, String name) {
-        this(libraryPath, name, MemorySegment.NULL);
+    public NativeMatchHandler(Path libraryPath) {
+        this(libraryPath, MemorySegment.NULL);
     }
 
-    /**
-     * As {@link #NativeMatchHandler(Path, String)}, passing {@code initArg} to {@code name_init}.
-     *
-     * <p>The handler receives it by overriding {@code configure(void *)}; pack several values into a
-     * standard-layout struct and pass a pointer to it. The segment must stay alive for the duration of
-     * the {@code _init} call, and longer if the handler retains what it points at.
-     *
-     * @param libraryPath shared library containing the entry points
-     * @param name symbol prefix — the handler's class name
-     * @param initArg pointer handed to {@code name_init}, or {@link MemorySegment#NULL} for none
-     * @throws NullPointerException if any argument is null
-     * @throws IllegalArgumentException if {@code name} is blank, if the library cannot be opened,
-     *     or if {@code name_on_match} cannot be resolved
-     */
-    public NativeMatchHandler(Path libraryPath, String name, MemorySegment initArg) {
+    public NativeMatchHandler(Path libraryPath, MemorySegment initCtx) {
         Objects.requireNonNull(libraryPath, "libraryPath must not be null");
-        Objects.requireNonNull(initArg, "initArg must not be null; use MemorySegment.NULL for none");
-        Objects.requireNonNull(name, "name must not be null");
-        if (name.isBlank()) {
-            // A blank prefix could only ever resolve "_on_match", which is a reserved identifier
-            // and cannot be produced by VS4J_REGISTER_HANDLER. It always means a lost config value.
-            throw new IllegalArgumentException("name must not be blank");
-        }
         Arena arena = Arena.ofShared();
         try {
             SymbolLookup lookup = SymbolLookup.libraryLookup(libraryPath, arena);
-            this.nativeOnMatch = resolveOnMatch(lookup, name);
-            this.context = callInit(lookup, name, initArg);
-            this.cleanable = CLEANER.register(this, new CleanupState(freeHandle(lookup, name), context, arena));
+            this.nativeOnMatch = resolveOnMatch(lookup);
+            this.context = callInit(lookup, arena, initCtx);
+            this.cleanable = CLEANER.register(this, new CleanupState(freeHandle(lookup), context, arena));
         } catch (RuntimeException e) {
             arena.close();
             throw e;
         }
     }
 
-    private static MemorySegment resolveOnMatch(SymbolLookup lookup, String className) {
-        return lookup.find(className + "_on_match")
-                .orElseThrow(() -> new IllegalArgumentException("Could not resolve required symbol " + className
-                        + "_on_match. A native match handler must at least provide an on_match entry point."));
+    private static MemorySegment resolveOnMatch(SymbolLookup lookup) {
+        return lookup.find("on_match")
+                .orElseThrow(
+                        () -> new IllegalArgumentException(
+                                "Could not resolve required symbol on_match. A native match handler must at least provide an on_match entry point."));
     }
 
-    private static MemorySegment callInit(SymbolLookup lookup, String name, MemorySegment initArg) {
-        MemorySegment init = lookup.find(name + "_init").orElse(null);
+    private static MemorySegment callInit(SymbolLookup lookup, Arena arena, MemorySegment initCtx) {
+        MemorySegment init = lookup.find("init").orElse(null);
         if (init == null) {
             return MemorySegment.NULL;
         }
+        MemorySegment raw;
         try {
-            return (MemorySegment)
-                    Linker.nativeLinker().downcallHandle(init, INIT_DESC).invoke(initArg);
+            // call the correct constructor, based on whether there exists an init arg or not
+            raw = (MemorySegment)
+                    Linker.nativeLinker().downcallHandle(init, INIT_DESC).invokeExact(initCtx);
         } catch (Throwable t) {
-            throw new IllegalStateException("Call to " + name + "_init failed", t);
+            throw new IllegalStateException("Call to init failed", t);
         }
+        if (raw.equals(MemorySegment.NULL)) {
+            return raw;
+        }
+        // Tie the raw MemorySegment to the same arena that owns this handler's lifecycle.
+        // => use-after-close() fails fast with IllegalStateException.
+        return raw.reinterpret(Long.MAX_VALUE, arena, null);
     }
 
-    private static MethodHandle freeHandle(SymbolLookup lookup, String name) {
-        return lookup.find(name + "_free")
+    private static MethodHandle freeHandle(SymbolLookup lookup) {
+        return lookup.find("close")
                 .map(addr -> Linker.nativeLinker().downcallHandle(addr, FREE_DESC))
                 .orElse(null);
     }
@@ -128,6 +103,10 @@ public final class NativeMatchHandler implements ScanHandler, AutoCloseable {
     public MemorySegment context() {
         return context;
     }
+
+    public void preScan() {}
+
+    public void postScan() {}
 
     /** Runs {@code _free} (if present) and releases the library. Idempotent. */
     @Override

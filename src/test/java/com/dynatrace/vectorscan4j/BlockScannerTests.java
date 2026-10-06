@@ -645,4 +645,27 @@ public class BlockScannerTests {
             assertEquals(List.of(new Match(0, 12), new Match(0, 15)), matches);
         }
     }
+
+    @Test
+    void scanReportsWhetherItCompleted() {
+        try (Database db = new Database(List.of(new Expression("pattern1")), BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            assertTrue(scanner.scan("pattern1 pattern1", doNothing), "a handler that never stops lets the scan finish");
+            assertFalse(scanner.scan("pattern1 pattern1", (_, _, _) -> false), "returning false stops it early");
+            assertTrue(scanner.scan("nothing to see", (_, _, _) -> false), "with no matches there is nothing to stop");
+        }
+    }
+
+    @Test
+    void batchedScanReportsWhetherItCompleted() {
+        try (Database db = new Database(List.of(new Expression("pattern1")), BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            String threeMatches = "pattern1 pattern1 pattern1";
+            assertTrue(scanner.scan(threeMatches, new BatchedMatchHandler(2, (buf, n) -> true)));
+            // the first full batch is delivered mid-scan, so returning false there stops the scan
+            assertFalse(scanner.scan(threeMatches, new BatchedMatchHandler(2, (buf, n) -> false)));
+            // a partial batch is only delivered after the scan has finished, so false there changes nothing
+            assertTrue(scanner.scan("pattern1", new BatchedMatchHandler(2, (buf, n) -> false)));
+        }
+    }
 }

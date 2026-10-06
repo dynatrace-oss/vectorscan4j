@@ -26,5 +26,4 @@ package com.dynatrace.vectorscan4j;
  *   <li>{@link NativeMatchHandler} — a native callback, avoiding upcalls into the JVM entirely
  * </ul>
  */
-public sealed interface ScanHandler
-        permits MatchHandler, BatchedMatchHandler, NativeMatchHandler, NativeMatchHandler2 {}
+public sealed interface ScanHandler permits MatchHandler, BatchedMatchHandler, NativeMatchHandler {}

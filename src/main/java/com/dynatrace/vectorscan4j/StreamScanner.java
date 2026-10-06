@@ -15,7 +15,6 @@
 */
 package com.dynatrace.vectorscan4j;
 
-import static com.dynatrace.vectorscan4j.constants.ErrorCode.HS_SCAN_TERMINATED;
 import static com.dynatrace.vectorscan4j.constants.ErrorCode.HS_SUCCESS;
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.STREAM_MODE;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNative.*;
@@ -61,7 +60,7 @@ public class StreamScanner extends Scanner {
     }
 
     @Override
-    public void scan(MemorySegment dataSegment, int length, ScanHandler handler) {
+    public boolean scan(MemorySegment dataSegment, int length, ScanHandler handler) {
         if (!streamOpen) {
             throw new IllegalStateException("Stream is closed. Open a new stream first.");
         }
@@ -71,12 +70,11 @@ public class StreamScanner extends Scanner {
         if (handler == null) {
             throw new IllegalArgumentException("handler must not be null");
         }
-        switch (handler) {
+        return switch (handler) {
             case MatchHandler h -> scan(dataSegment, length, h);
             case BatchedMatchHandler h -> scan(dataSegment, length, h);
             case NativeMatchHandler h -> scan(dataSegment, length, h);
-            default -> throw new RuntimeException();
-        }
+        };
     }
 
     /**
@@ -95,15 +93,13 @@ public class StreamScanner extends Scanner {
      *     {@code false} to stop early
      * @throws VectorscanException if vectorscan reports an error other than early termination
      */
-    private void scan(MemorySegment dataSegment, int length, MatchHandler handler) {
+    private boolean scan(MemorySegment dataSegment, int length, MatchHandler handler) {
         setHandler(handler);
-        int ans = hs_scan_stream(streamNative, dataSegment, length, 0, scratchNative, funcPtr, MemorySegment.NULL);
-        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
-            throw new VectorscanException(ans);
-        }
+        return completed(
+                hs_scan_stream(streamNative, dataSegment, length, 0, scratchNative, funcPtr, MemorySegment.NULL));
     }
 
-    private void scan(MemorySegment dataSegment, int length, BatchedMatchHandler handler) {
+    private boolean scan(MemorySegment dataSegment, int length, BatchedMatchHandler handler) {
         throw new RuntimeException();
     }
 
@@ -123,12 +119,9 @@ public class StreamScanner extends Scanner {
      * @throws VectorscanException if the native scan call returns an error other than
      *     {@link com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
      */
-    private void scan(MemorySegment dataSegment, int length, NativeMatchHandler handler) {
-        int ans = hs_scan_stream(
-                streamNative, dataSegment, length, 0, scratchNative, handler.nativeOnMatch, handler.context());
-        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
-            throw new VectorscanException(ans);
-        }
+    private boolean scan(MemorySegment dataSegment, int length, NativeMatchHandler handler) {
+        return completed(hs_scan_stream(
+                streamNative, dataSegment, length, 0, scratchNative, handler.nativeOnMatch, handler.context()));
     }
 
     /**

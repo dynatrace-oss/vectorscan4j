@@ -15,8 +15,6 @@
 */
 package com.dynatrace.vectorscan4j;
 
-import static com.dynatrace.vectorscan4j.constants.ErrorCode.HS_SCAN_TERMINATED;
-import static com.dynatrace.vectorscan4j.constants.ErrorCode.HS_SUCCESS;
 import static com.dynatrace.vectorscan4j.constants.ExecutionMode.BLOCK_MODE;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNative.*;
 import static java.lang.foreign.ValueLayout.JAVA_INT;
@@ -43,19 +41,19 @@ public class BlockScanner extends Scanner {
         super(db);
     }
 
-    public void scan(MemorySegment dataSegment, int length, ScanHandler handler) {
+    @Override
+    public boolean scan(MemorySegment dataSegment, int length, ScanHandler handler) {
         if (database.isClosed()) {
             throw new IllegalStateException("Database was already closed.");
         }
         if (handler == null) {
             throw new IllegalArgumentException("handler must not be null");
         }
-        switch (handler) {
+        return switch (handler) {
             case MatchHandler h -> scan(dataSegment, length, h);
             case BatchedMatchHandler h -> scan(dataSegment, length, h);
             case NativeMatchHandler h -> scan(dataSegment, length, h);
-            case NativeMatchHandler2 h -> scan(dataSegment, length, h);
-        }
+        };
     }
 
     /**
@@ -77,15 +75,13 @@ public class BlockScanner extends Scanner {
      * @throws VectorscanException if the native scan call returns an error other than {@link
      *     com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
      */
-    private void scan(MemorySegment dataSegment, int length, MatchHandler handler) {
+    private boolean scan(MemorySegment dataSegment, int length, MatchHandler handler) {
         setHandler(handler);
-        int ans = hs_scan(this.database.dbNative, dataSegment, length, 0, scratchNative, funcPtr, MemorySegment.NULL);
-        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
-            throw new VectorscanException(ans);
-        }
+        return completed(
+                hs_scan(this.database.dbNative, dataSegment, length, 0, scratchNative, funcPtr, MemorySegment.NULL));
     }
 
-    private void scan(MemorySegment dataSegment, int length, BatchedMatchHandler handler) {
+    private boolean scan(MemorySegment dataSegment, int length, BatchedMatchHandler handler) {
         setBulkHandler(handler);
         int ans = hs_scan(
                 this.database.dbNative,
@@ -95,14 +91,14 @@ public class BlockScanner extends Scanner {
                 scratchNative,
                 collect_match$address(),
                 collectMatchCtx);
-        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
-            throw new VectorscanException(ans);
-        }
+        boolean completed = completed(ans);
+        // An early stop resets the native count to 0, so this only flushes after a completed scan.
         int remaining = collectMatchCtx.get(JAVA_INT, 8);
         if (remaining > 0) {
             handler.handler().matchAll(batchCallHandler.batchBuffer, remaining);
             collectMatchCtx.set(JAVA_INT, 8, 0);
         }
+        return completed;
     }
 
     /**
@@ -124,7 +120,8 @@ public class BlockScanner extends Scanner {
      * @throws VectorscanException      if the native scan call returns an error other than
      *                                  {@link com.dynatrace.vectorscan4j.constants.ErrorCode#HS_SCAN_TERMINATED HS_SCAN_TERMINATED}
      */
-    private void scan(MemorySegment dataSegment, int length, NativeMatchHandler handler) {
+    private boolean scan(MemorySegment dataSegment, int length, NativeMatchHandler handler) {
+        handler.preScan();
         int ans = hs_scan(
                 this.database.dbNative,
                 dataSegment,
@@ -133,24 +130,8 @@ public class BlockScanner extends Scanner {
                 scratchNative,
                 handler.nativeOnMatch,
                 handler.context());
-        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
-            throw new VectorscanException(ans);
-        }
-    }
-
-    private void scan(MemorySegment dataSegment, int length, NativeMatchHandler2 handler2) {
-        handler2.preScan();
-        int ans = hs_scan(
-                this.database.dbNative,
-                dataSegment,
-                length,
-                0,
-                scratchNative,
-                handler2.nativeOnMatch,
-                handler2.context());
-        if (ans != HS_SUCCESS.getCode() && ans != HS_SCAN_TERMINATED.getCode()) {
-            throw new VectorscanException(ans);
-        }
-        handler2.postScan();
+        boolean completed = completed(ans);
+        handler.postScan();
+        return completed;
     }
 }

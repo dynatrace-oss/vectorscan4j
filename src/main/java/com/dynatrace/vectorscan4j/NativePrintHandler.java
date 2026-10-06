@@ -17,7 +17,7 @@ package com.dynatrace.vectorscan4j;
 
 import java.nio.file.Path;
 
-public class NativePrintHandler extends NativeMatchHandler2 {
+public class NativePrintHandler extends NativeMatchHandler {
     public NativePrintHandler(Path libraryPath) {
         super(libraryPath);
     }

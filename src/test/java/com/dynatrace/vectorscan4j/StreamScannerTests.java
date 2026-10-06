@@ -252,4 +252,13 @@ public class StreamScannerTests {
 
         assertTrue(userObserved.isEmpty());
     }
+
+    @Test
+    void scanReportsWhetherItCompleted() {
+        try (Database db = new Database(List.of(new Expression("pattern1")), STREAM_MODE);
+                StreamScanner scanner = new StreamScanner(db)) {
+            assertTrue(scanner.scan("pattern1 pattern1", doNothing));
+            assertFalse(scanner.scan("pattern1 pattern1", (_, _, _) -> false));
+        }
+    }
 }

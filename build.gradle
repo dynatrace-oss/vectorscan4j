@@ -125,7 +125,7 @@ tasks.register('buildCollectMatch', Exec) {
 // The native callback libraries used by NativeMatchHandlerTests are no longer built as a Gradle
 // task: that made every `test` invocation compile them regardless of which tests were selected.
 // NativeMatchHandlerTests.buildNativeCallbacks() now compiles them itself in @BeforeAll, only when
-// that class actually runs, with its own staleness check against the .cpp files and vs4j_handler.h.
+// that class actually runs, with its own staleness check against the .cpp files.
 
 spotless {
     java {

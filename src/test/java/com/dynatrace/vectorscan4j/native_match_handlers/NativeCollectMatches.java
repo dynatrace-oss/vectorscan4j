@@ -15,13 +15,13 @@
 */
 package com.dynatrace.vectorscan4j.native_match_handlers;
 
-import com.dynatrace.vectorscan4j.NativeMatchHandler2;
+import com.dynatrace.vectorscan4j.NativeMatchHandler;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.ValueLayout;
 import java.lang.invoke.VarHandle;
 import java.nio.file.Path;
 
-public class NativeCollectMatches extends NativeMatchHandler2 {
+public class NativeCollectMatches extends NativeMatchHandler {
     private static final MemoryLayout CONTEXT_LAYOUT = MemoryLayout.structLayout(
                     ValueLayout.ADDRESS.withName("buffer"),
                     ValueLayout.JAVA_INT.withName("count"),

@@ -15,6 +15,7 @@
 */
 package com.dynatrace.vectorscan4j;
 
+import static com.dynatrace.vectorscan4j.constants.ErrorCode.HS_SCAN_TERMINATED;
 import static com.dynatrace.vectorscan4j.constants.ErrorCode.HS_SUCCESS;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNative.*;
 import static com.dynatrace.vectorscan4j.internal.VectorscanNativeShared.C_LONG;
@@ -192,9 +193,10 @@ abstract class Scanner implements AutoCloseable {
      * @param data   text to scan
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
+     * @return {@code true} if the scan ran to the end, {@code false} if the handler stopped it early
      */
-    public void scan(String data, ScanHandler handler) {
-        scan(data.getBytes(StandardCharsets.UTF_8), handler);
+    public boolean scan(String data, ScanHandler handler) {
+        return scan(data.getBytes(StandardCharsets.UTF_8), handler);
     }
 
     /**
@@ -204,9 +206,10 @@ abstract class Scanner implements AutoCloseable {
      * @param data text to scan
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
+     * @return {@code true} if the scan ran to the end, {@code false} if the handler stopped it early
      */
-    public void scan(String data, MatchHandler handler) {
-        scan(data, (ScanHandler) handler);
+    public boolean scan(String data, MatchHandler handler) {
+        return scan(data, (ScanHandler) handler);
     }
 
     /**
@@ -215,13 +218,14 @@ abstract class Scanner implements AutoCloseable {
      * @param data    input bytes
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
+     * @return {@code true} if the scan ran to the end, {@code false} if the handler stopped it early
      */
-    public void scan(byte[] data, ScanHandler handler) {
+    public boolean scan(byte[] data, ScanHandler handler) {
         ensureDataBuffer(data.length);
         dataBuffer.clear();
         dataBuffer.put(data);
         dataBuffer.flip();
-        scan(dataSegment, dataBuffer.remaining(), handler);
+        return scan(dataSegment, dataBuffer.remaining(), handler);
     }
 
     /**
@@ -231,9 +235,10 @@ abstract class Scanner implements AutoCloseable {
      * @param data input bytes
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
+     * @return {@code true} if the scan ran to the end, {@code false} if the handler stopped it early
      */
-    public void scan(byte[] data, MatchHandler handler) {
-        scan(data, (ScanHandler) handler);
+    public boolean scan(byte[] data, MatchHandler handler) {
+        return scan(data, (ScanHandler) handler);
     }
 
     /**
@@ -246,11 +251,12 @@ abstract class Scanner implements AutoCloseable {
      * @param length  number of bytes to scan
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
+     * @return {@code true} if the scan ran to the end, {@code false} if the handler stopped it early
      * @throws IndexOutOfBoundsException if {@code offset} or {@code length} are invalid for {@code
      *                                   data}
      */
-    public void scan(byte[] data, int offset, int length, ScanHandler handler) {
-        scan(ByteBuffer.wrap(data, offset, length), handler);
+    public boolean scan(byte[] data, int offset, int length, ScanHandler handler) {
+        return scan(ByteBuffer.wrap(data, offset, length), handler);
     }
 
     /**
@@ -262,9 +268,10 @@ abstract class Scanner implements AutoCloseable {
      * @param length number of bytes to scan
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
+     * @return {@code true} if the scan ran to the end, {@code false} if the handler stopped it early
      */
-    public void scan(byte[] data, int offset, int length, MatchHandler handler) {
-        scan(data, offset, length, (ScanHandler) handler);
+    public boolean scan(byte[] data, int offset, int length, MatchHandler handler) {
+        return scan(data, offset, length, (ScanHandler) handler);
     }
 
     /**
@@ -278,16 +285,17 @@ abstract class Scanner implements AutoCloseable {
      * @param buf     input buffer
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
+     * @return {@code true} if the scan ran to the end, {@code false} if the handler stopped it early
      */
-    public void scan(ByteBuffer buf, ScanHandler handler) {
+    public boolean scan(ByteBuffer buf, ScanHandler handler) {
         if (buf.isDirect()) {
-            scan(MemorySegment.ofBuffer(buf), buf.remaining(), handler);
+            return scan(MemorySegment.ofBuffer(buf), buf.remaining(), handler);
         } else {
             ensureDataBuffer(buf.remaining());
             dataBuffer.clear();
             dataBuffer.put(buf);
             dataBuffer.flip();
-            scan(dataSegment, dataBuffer.remaining(), handler);
+            return scan(dataSegment, dataBuffer.remaining(), handler);
         }
     }
 
@@ -298,9 +306,10 @@ abstract class Scanner implements AutoCloseable {
      * @param buf input buffer
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
+     * @return {@code true} if the scan ran to the end, {@code false} if the handler stopped it early
      */
-    public void scan(ByteBuffer buf, MatchHandler handler) {
-        scan(buf, (ScanHandler) handler);
+    public boolean scan(ByteBuffer buf, MatchHandler handler) {
+        return scan(buf, (ScanHandler) handler);
     }
 
     /**
@@ -314,8 +323,26 @@ abstract class Scanner implements AutoCloseable {
      * @param length number of bytes to scan, starting at the beginning of {@code dataSegment}
      * @param handler callback invoked for each match; return {@code true} to continue scanning,
      *                {@code false} to stop early
+     * @return {@code true} if the scan ran to the end, {@code false} if the handler stopped it early
      */
-    protected abstract void scan(MemorySegment dataSegment, int length, ScanHandler handler);
+    protected abstract boolean scan(MemorySegment dataSegment, int length, ScanHandler handler);
+
+    /**
+     * Translates the return code of an {@code hs_scan}-family call.
+     *
+     * @param ans the native return code
+     * @return {@code true} for {@code HS_SUCCESS}, {@code false} for {@code HS_SCAN_TERMINATED}
+     * @throws VectorscanException for any other code
+     */
+    protected static boolean completed(int ans) {
+        if (ans == HS_SUCCESS.getCode()) {
+            return true;
+        }
+        if (ans == HS_SCAN_TERMINATED.getCode()) {
+            return false;
+        }
+        throw new VectorscanException(ans);
+    }
 
     /**
      * Returns the size of this scanner's native scratch space.
