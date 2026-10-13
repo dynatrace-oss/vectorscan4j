@@ -20,6 +20,11 @@ jacoco {
 jacocoTestReport {
     dependsOn test
 
+    // VectorscanNative is generated bindings (jextract-style); it is excluded from the report.
+    classDirectories.setFrom(files(classDirectories.files.collect {
+        fileTree(dir: it, exclude: ['com/dynatrace/vectorscan4j/internal/VectorscanNative*.class'])
+    }))
+
     reports {
         html.required.set(true)
     }
