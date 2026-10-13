@@ -57,7 +57,8 @@ class NativeLoaderTests {
         Path p = NativeLoader.buildResourcePath("vectorscan", "Linux", "amd64");
         String normalized = p.toString().replace('\\', '/');
         assertTrue(normalized.startsWith("/native/linux/x86_64/"));
-        assertTrue(normalized.endsWith(".so"));
+        // The file name comes from the JVM running the test (.so, .dylib or .dll), as in buildResourcePath.
+        assertTrue(normalized.endsWith(System.mapLibraryName("vectorscan")));
     }
 
     @Test
