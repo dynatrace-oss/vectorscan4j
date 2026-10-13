@@ -4,12 +4,16 @@
 
 This project redistributes the following vectorscan binaries:
 
-- `src/main/resources/native/linux/x86_64/libvectorscan.so`
-- `src/main/resources/native/linux/aarch64/libvectorscan.so`
+- `src/main/resources/native/linux/x86_64/libhs.so`
+- `src/main/resources/native/linux/aarch64/libhs.so`
 
 Upstream project:
 
 - <https://github.com/VectorCamp/vectorscan>
+
+These were built from the `main` branch of the upstream repository with `BUILD_SHARED_LIBS=On`,
+`FAT_RUNTIME=Off` and the default CPU target. The exact upstream commit was not recorded when the
+binaries were committed.
 
 License notice:
 

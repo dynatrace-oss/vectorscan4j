@@ -33,7 +33,11 @@ public final class NativeLoader {
 
     private NativeLoader() {}
 
-    /** Extracts the bundled library and loads it into the JVM, making its symbols visible to {@code loaderLookup()}. */
+    /**
+     * Extracts the bundled library and loads it into the JVM, making its symbols visible to {@code loaderLookup()}.
+     *
+     * @param libBaseName the name without platform prefix or suffix, e.g. {@code "hs"} for {@code libhs.so}
+     */
     public static synchronized void load(String libBaseName) {
         System.load(extract(libBaseName).toAbsolutePath().toString());
     }

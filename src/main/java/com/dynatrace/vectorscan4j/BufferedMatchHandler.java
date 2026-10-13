@@ -66,6 +66,8 @@ public class BufferedMatchHandler extends NativeMatchHandler {
     private final BatchCallHandler callHandler;
 
     /**
+     * Creates a handler that collects matches into a native buffer of {@code bufferSize} entries.
+     *
      * @param bufferSize how many matches to collect before handing them to {@code handler}; at least 1
      * @param handler receives each buffer; return {@code false} to stop the scan
      */

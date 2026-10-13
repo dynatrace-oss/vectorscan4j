@@ -42,10 +42,25 @@ public non-sealed class NativeMatchHandler implements ScanHandler, AutoCloseable
 
     final MemorySegment nativeOnMatch;
 
+    /**
+     * Loads the handler's library and calls its {@code init}, if it has one, with a {@code NULL} argument.
+     *
+     * @param libraryPath the shared library containing {@code on_match} and, optionally, {@code init} and {@code close}
+     * @throws NullPointerException if {@code libraryPath} is null
+     * @throws IllegalArgumentException if the library does not provide {@code on_match}
+     */
     public NativeMatchHandler(Path libraryPath) {
         this(libraryPath, MemorySegment.NULL);
     }
 
+    /**
+     * Loads the handler's library and calls its {@code init} with {@code initArgs}.
+     *
+     * @param libraryPath the shared library containing {@code on_match} and, optionally, {@code init} and {@code close}
+     * @param initArgs the pointer passed to {@code init}, or {@link MemorySegment#NULL} for none
+     * @throws NullPointerException if {@code libraryPath} is null
+     * @throws IllegalArgumentException if the library does not provide {@code on_match}
+     */
     public NativeMatchHandler(Path libraryPath, MemorySegment initArgs) {
         Objects.requireNonNull(libraryPath, "libraryPath must not be null");
         Arena arena = Arena.ofShared();
@@ -99,8 +114,10 @@ public non-sealed class NativeMatchHandler implements ScanHandler, AutoCloseable
         return context;
     }
 
+    /** Called once before each scan. Does nothing by default; override it to prepare per-scan state. */
     public void preScan() {}
 
+    /** Called once after each scan has finished, including scans that were stopped early. Does nothing by default. */
     public void postScan() {}
 
     /** Runs {@code _free} (if present) and releases the library. Idempotent. */
