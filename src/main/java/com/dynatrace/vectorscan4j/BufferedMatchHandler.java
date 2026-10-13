@@ -35,6 +35,26 @@ import java.util.Objects;
  * upcall per buffer rather than one per match. Whatever is left in a partial buffer is delivered after the scan.
  */
 public class BufferedMatchHandler extends NativeMatchHandler {
+    /**
+     * Handles a whole buffer of collected matches at once. Wrapped by {@link BufferedMatchHandler}, which pairs it
+     * with the batch size to use.
+     *
+     * <p>The buffer holds {@code nMatches} entries of 12 bytes each: the pattern id, the start offset and the
+     * exclusive end offset, in that order, as 32-bit values. It points at scanner-owned native memory and is
+     * only valid for the duration of the call.
+     */
+    @FunctionalInterface
+    public interface BatchHandler {
+        /**
+         * Handles one batch of collected matches.
+         *
+         * @param buf the collected matches, in FIFO order
+         * @param nMatches how many matches {@code buf} holds
+         * @return {@code true} to continue scanning, {@code false} to stop early
+         */
+        boolean matchAll(ByteBuffer buf, int nMatches);
+    }
+
     /** Bytes per collected match: id, from and to as 32-bit values. */
     private static final int ENTRY_BYTES = 12;
 
@@ -62,7 +82,7 @@ public class BufferedMatchHandler extends NativeMatchHandler {
 
     /** The signature native code calls whenever a buffer fills up: {@code int (*)(void *buffer, int32_t count)}. */
     private static final FunctionDescriptor UPCALL_DESC =
-            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT);
+            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.JAVA_INT);
 
     private static final MethodHandle UPCALL_TARGET = findUpcallTarget();
 
@@ -116,7 +136,7 @@ public class BufferedMatchHandler extends NativeMatchHandler {
     public void postScan() {
         int remaining = (int) CTX_COUNT.get(context(), 0L);
         if (remaining > 0) {
-            callHandler.deliver(remaining);
+            callHandler.apply(remaining);
             CTX_COUNT.set(context(), 0L, 0);
         }
     }
@@ -129,14 +149,13 @@ public class BufferedMatchHandler extends NativeMatchHandler {
             this.handler = handler;
         }
 
-        /** Called by native code each time a buffer fills up, through the upcall stub. */
-        int apply(MemorySegment ignored, int count) {
-            return deliver(count) ? 0 : 1;
-        }
-
-        boolean deliver(int count) {
+        /**
+         * Hands {@code count} collected matches to the handler. Native code calls this through the upcall stub
+         * when a buffer fills up; {@code postScan} calls it directly for a partial buffer.
+         */
+        int apply(int count) {
             buffer.limit(count * ENTRY_BYTES).position(0);
-            return handler.matchAll(buffer, count);
+            return handler.matchAll(buffer, count) ? 0 : 1;
         }
     }
 }

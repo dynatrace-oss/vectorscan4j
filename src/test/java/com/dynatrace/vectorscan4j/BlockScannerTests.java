@@ -480,6 +480,25 @@ public class BlockScannerTests {
     }
 
     @Test
+    void bufferedMatchHandlerCtxGetsGarbageCollected() throws InterruptedException {
+        BufferedMatchHandler handler = new BufferedMatchHandler(50, (_, _) -> false);
+        WeakReference<BufferedMatchHandler> handlerRef = new WeakReference<>(handler);
+        WeakReference<MemorySegment> handlerCtxRef = new WeakReference<>(handler.context());
+        assertNotNull(handlerRef.get());
+        assertNotNull(handlerCtxRef.get());
+        handler = null;
+        // The handler is freed first; its context is released a little later, once the Cleaner has run.
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (handlerCtxRef.get() != null && System.nanoTime() < deadline) {
+            System.gc();
+            Thread.sleep(50);
+        }
+        assertNull(handlerRef.get());
+        // GC-ing the BufferedMatchHandler also has to free the context MemorySegment
+        assertNull(handlerCtxRef.get());
+    }
+
+    @Test
     void usingScannerFromMultipleThreadsThrows() throws Exception {
         Database db = new Database(expressions, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);

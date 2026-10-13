@@ -3,7 +3,7 @@
 #include <cstdint>
 #include <cstdlib>
 
-typedef int (*java_handler_t)(void *buffer, int32_t count);
+typedef int (*java_handler_t)(int32_t count);
 
 /* Passed to init() by NativeBatchHandler, which mirrors this layout. */
 struct config {
@@ -42,7 +42,7 @@ extern "C" {
         ctx->count++;
 
         if (ctx->count == ctx->buffer_size) {
-            int result = ctx->java_handler(ctx->buffer, ctx->count);
+            int result = ctx->java_handler(ctx->count);
             ctx->count = 0;
             return result;
         }
