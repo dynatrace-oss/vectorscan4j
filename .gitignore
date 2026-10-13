@@ -1,5 +1,7 @@
 src/jmh/resources/
-src/test/resources/
+src/test/resources/*
+!src/test/resources/native/
+src/test/resources/native/*.so
 .env
 
 .gradle/

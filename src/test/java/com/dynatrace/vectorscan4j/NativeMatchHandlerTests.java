@@ -70,6 +70,9 @@ public class NativeMatchHandlerTests {
         }
         assumeTrue(hasCxx, "c++ not available; native-callback tests will be skipped.");
 
+        assertTrue(
+                Files.isDirectory(NATIVE_DIR),
+                "Native test sources missing at " + NATIVE_DIR + "; they must be tracked by git, see .gitignore");
         try (Stream<Path> files = Files.list(NATIVE_DIR)) {
             for (Path cpp : files.filter(p -> p.toString().endsWith(".cpp")).toList()) {
                 Path so = NATIVE_DIR.resolve(cpp.getFileName().toString().replace(".cpp", ".so"));
