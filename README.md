@@ -52,7 +52,7 @@ implementation "com.dynatrace.vectorscan4j:vectorscan4j:{latest-vectorscan4j-ver
 ### Requirements
 
 - **Java 25+** (uses the [Foreign Function & Memory API](https://docs.oracle.com/en/java/javase/25/core/foreign-function-and-memory-api.html))
-- **Linux** (x86-64 or aarch64) — native Vectorscan binaries are bundled in the JAR
+- **Linux** (x86-64 or aarch64), and Mac (aarch64) — native Vectorscan binaries are bundled inside the JAR
 
 ## Usage
 
@@ -268,8 +268,9 @@ Currently, there is no support for Vectorscan's Vector mode execution.
 
 This repository bundles prebuilt native binaries for Vectorscan under:
 
-- `src/main/resources/native/linux/x86_64/libvectorscan.so`
-- `src/main/resources/native/linux/aarch64/libvectorscan.so`
+- `src/main/resources/native/linux/x86_64/libhs.so`
+- `src/main/resources/native/linux/aarch64/libhs.so`
+- `src/main/resources/native/osx/aarch64/libhs.dylib`
 
 The corresponding third-party notice and license reproduction is provided in:
 
