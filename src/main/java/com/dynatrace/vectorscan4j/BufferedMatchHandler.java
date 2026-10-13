@@ -16,11 +16,14 @@
 package com.dynatrace.vectorscan4j;
 
 import com.dynatrace.vectorscan4j.internal.NativeLoader;
-import com.dynatrace.vectorscan4j.internal.VectorscanBatchedMatchHandler;
 import java.lang.foreign.Arena;
+import java.lang.foreign.FunctionDescriptor;
+import java.lang.foreign.Linker;
 import java.lang.foreign.MemoryLayout;
 import java.lang.foreign.MemorySegment;
 import java.lang.foreign.ValueLayout;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
 import java.lang.invoke.VarHandle;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -57,6 +60,20 @@ public class BufferedMatchHandler extends NativeMatchHandler {
             CONTEXT_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement("buffer"));
     private static final VarHandle CTX_COUNT = CONTEXT_LAYOUT.varHandle(MemoryLayout.PathElement.groupElement("count"));
 
+    /** The signature native code calls whenever a buffer fills up: {@code int (*)(void *buffer, int32_t count)}. */
+    private static final FunctionDescriptor UPCALL_DESC =
+            FunctionDescriptor.of(ValueLayout.JAVA_INT, ValueLayout.ADDRESS, ValueLayout.JAVA_INT);
+
+    private static final MethodHandle UPCALL_TARGET = findUpcallTarget();
+
+    private static MethodHandle findUpcallTarget() {
+        try {
+            return MethodHandles.lookup().findVirtual(BatchCallHandler.class, "apply", UPCALL_DESC.toMethodType());
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError(e);
+        }
+    }
+
     /**
      * Owns the upcall stub. Native code holds a raw pointer to that stub, so this field is what keeps it alive.
      */
@@ -81,7 +98,9 @@ public class BufferedMatchHandler extends NativeMatchHandler {
         BatchCallHandler callHandler = new BatchCallHandler(handler);
         MemorySegment config = upcallArena.allocate(CONFIG_LAYOUT);
         CONFIG_BATCH_SIZE.set(config, 0L, bufferSize);
-        CONFIG_JAVA_HANDLER.set(config, 0L, VectorscanBatchedMatchHandler.allocate(callHandler, upcallArena));
+        MemorySegment stub =
+                Linker.nativeLinker().upcallStub(UPCALL_TARGET.bindTo(callHandler), UPCALL_DESC, upcallArena);
+        CONFIG_JAVA_HANDLER.set(config, 0L, stub);
         this.upcallArena = upcallArena;
         this.callHandler = callHandler;
         super(NativeLoader.extract("buffered_match_handler"), config);
@@ -102,7 +121,7 @@ public class BufferedMatchHandler extends NativeMatchHandler {
         }
     }
 
-    private static final class BatchCallHandler implements VectorscanBatchedMatchHandler.Function {
+    private static final class BatchCallHandler {
         private final BatchHandler handler;
         private ByteBuffer buffer;
 
@@ -110,9 +129,8 @@ public class BufferedMatchHandler extends NativeMatchHandler {
             this.handler = handler;
         }
 
-        /** Called by native code each time a batch fills up. */
-        @Override
-        public int apply(MemorySegment ignored, int count) {
+        /** Called by native code each time a buffer fills up, through the upcall stub. */
+        int apply(MemorySegment ignored, int count) {
             return deliver(count) ? 0 : 1;
         }
 
