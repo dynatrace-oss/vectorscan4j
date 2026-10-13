@@ -82,44 +82,32 @@ tasks.register('jextract') {
     }
 }
 
-// Utility task: compile collect_match.cpp and deposit the result directly into
-// src/main/resources so it is committed and bundled in the JAR automatically.
-// Run manually with ./gradlew buildCollectMatch when the C++ source changes.
+// Compiles buffered_match_handler.cpp into the bundled library for this platform and architecture,
+// under src/main/resources/native/<os>/<arch>/, so it is committed and bundled in the JAR automatically.
+// Run manually with ./gradlew buildBufferedMatchHandler on each platform when the C++ source changes.
 def nativeSrcDir = file("src/main/resources/native")
-def cmakeBuildDir = layout.buildDirectory.dir("cmake-native").get().asFile
 def osName = System.getProperty("os.name").toLowerCase()
 def osArch = System.getProperty("os.arch").toLowerCase()
 def osPart = osName.contains("mac") ? "osx" : osName.contains("win") ? "windows" : "linux"
 def archPart = osArch == "amd64" ? "x86_64" : osArch  // normalize amd64 → x86_64
 def nativeOutDir = file("src/main/resources/native/${osPart}/${archPart}")
+def bufferedSrc = file("${nativeSrcDir}/buffered_match_handler.cpp")
+def bufferedOut = new File(nativeOutDir, System.mapLibraryName("buffered_match_handler"))
+def sharedFlag = osPart == "osx" ? "-dynamiclib" : "-shared"
 
-tasks.register('cmakeConfigure', Exec) {
-    inputs.file("${nativeSrcDir}/CMakeLists.txt")
-    inputs.file("${nativeSrcDir}/collect_match.cpp")
-    outputs.dir(cmakeBuildDir)
-    doFirst { cmakeBuildDir.mkdirs() }
-    commandLine 'cmake',
-            '-S', nativeSrcDir.absolutePath,
-            '-B', cmakeBuildDir.absolutePath,
-            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=${nativeOutDir.absolutePath}",
-            "-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE=${nativeOutDir.absolutePath}",
-            "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=${nativeOutDir.absolutePath}",
-            "-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=${nativeOutDir.absolutePath}"
-}
-
-tasks.register('buildCollectMatch', Exec) {
-    dependsOn 'cmakeConfigure'
-    inputs.file("${nativeSrcDir}/collect_match.cpp")
-    outputs.dir(nativeOutDir)
+tasks.register('buildBufferedMatchHandler', Exec) {
+    inputs.file(bufferedSrc)
+    outputs.file(bufferedOut)
     doFirst { nativeOutDir.mkdirs() }
-    commandLine 'cmake', '--build', cmakeBuildDir.absolutePath, '--config', 'Release'
+    commandLine 'c++', '-std=c++17', '-O3', '-fPIC', sharedFlag,
+            bufferedSrc.absolutePath, '-o', bufferedOut.absolutePath
 }
 
-// buildCollectMatch writes its .so into src/main/resources, which these tasks consume as input.
+// buildBufferedMatchHandler writes its .so into src/main/resources, which these tasks consume as input.
 // Order them when both are scheduled; deliberately not dependsOn, so a normal build does not
 // trigger a native rebuild.
 ['processResources', 'sourcesJar'].each { consumer ->
-    tasks.named(consumer).configure { mustRunAfter 'buildCollectMatch' }
+    tasks.named(consumer).configure { mustRunAfter 'buildBufferedMatchHandler' }
 }
 
 // The native callback libraries used by NativeMatchHandlerTests are no longer built as a Gradle
@@ -144,13 +132,11 @@ tasks.named("jar") {
     }
     exclude("native/vectorscan.h")
     exclude("native/CMakeLists.txt")
-    exclude("native/collect_match_legacy.cpp")
 }
 
 tasks.named("sourcesJar") {
     exclude("native/vectorscan.h")
     exclude("native/CMakeLists.txt")
-    exclude("native/collect_match_legacy.cpp")
 }
 
 publishing {

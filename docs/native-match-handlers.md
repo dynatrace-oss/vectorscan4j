@@ -128,9 +128,10 @@ For more working handlers, see the sources in
 [`native_count_match.cpp`](../src/test/resources/native/native_count_match.cpp) counts matches,
 [`native_print_match.cpp`](../src/test/resources/native/native_print_match.cpp) prints each one, and
 [`native_collect_match.cpp`](../src/test/resources/native/native_collect_match.cpp) stores every match in a buffer that grows as needed.
-[`native_collect_match.cpp`](../src/main/resources/native/buffered_match_handler.cpp) in combination with the 
-[`BufferedMatchHandler`](../src/main/java/com/dynatrace/vectorscan4j/BufferedMatchHandler.java) is a default implementation 
-already included in vectorscan4j. You can use this implementation for buffered match handling on the Java-side. 
+
+[`buffered_match_handler.cpp`](../src/main/resources/native/buffered_match_handler.cpp) is the native side of
+[`BufferedMatchHandler`](../src/main/java/com/dynatrace/vectorscan4j/BufferedMatchHandler.java), a buffered match handler
+that ships with vectorscan4j, so you can use buffered match handling without writing any native code.
 
 `extern "C"` matters: it is what keeps the symbol names unmangled, so that `NativeMatchHandler` can
 find them by name. C++ member functions can never be given C linkage, which is why the entry points

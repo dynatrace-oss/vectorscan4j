@@ -432,14 +432,6 @@ public class VectorscanNative extends VectorscanNativeShared {
         }
     }
 
-    private static class collect_match {
-        public static final MemorySegment ADDR = SYMBOL_LOOKUP.findOrThrow("collect_match");
-    }
-
-    public static MemorySegment collect_match$address() {
-        return collect_match.ADDR;
-    }
-
     private static class free_context {
         public static final FunctionDescriptor DESC = FunctionDescriptor.ofVoid(VectorscanNative.C_POINTER);
 

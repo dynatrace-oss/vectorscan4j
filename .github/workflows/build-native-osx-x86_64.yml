@@ -34,8 +34,8 @@ jobs:
           mkdir -p src/main/resources/native/osx/x86_64/
           cp vectorscan/build/lib/libhs.dylib src/main/resources/native/osx/x86_64/
 
-      - name: Build collect_match
-        run: ./gradlew buildCollectMatch
+      - name: Build buffered match handler
+        run: ./gradlew buildBufferedMatchHandler
 
       - name: Test
         run: ./gradlew test
