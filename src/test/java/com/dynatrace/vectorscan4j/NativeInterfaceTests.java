@@ -37,11 +37,14 @@ public class NativeInterfaceTests {
         assertThrows(IllegalStateException.class, () -> hs_database_info(seg, seg));
         assertThrows(IllegalStateException.class, () -> hs_compile_multi(seg, seg, seg, 0, 0, seg, seg, seg));
         assertThrows(IllegalStateException.class, () -> hs_free_compile_error(seg));
+        assertThrows(IllegalStateException.class, () -> hs_free_scratch(seg));
         assertThrows(IllegalStateException.class, () -> hs_open_stream(seg, 0, seg));
         assertThrows(IllegalStateException.class, () -> hs_scan_stream(seg, seg, 0, 0, seg, seg, seg));
         assertThrows(IllegalStateException.class, () -> hs_close_stream(seg, seg, seg, seg));
         assertThrows(IllegalStateException.class, () -> hs_reset_stream(seg, 0, seg, seg, seg));
         assertThrows(IllegalStateException.class, () -> hs_scan(seg, seg, 0, 0, seg, seg, seg));
+        assertThrows(IllegalStateException.class, () -> hs_alloc_scratch(seg, seg));
+        assertThrows(IllegalStateException.class, () -> hs_scratch_size(seg, seg));
         assertThrows(IllegalStateException.class, () -> hs_alloc_scratch(seg, seg));
     }
 }

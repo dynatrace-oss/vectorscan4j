@@ -85,7 +85,7 @@ public final class NativeLoader {
             return "windows";
         }
         if (os.contains("mac") || os.contains("darwin")) {
-            return "macos";
+            return "osx";
         }
         if (os.contains("nux") || os.contains("nix")) {
             return "linux";

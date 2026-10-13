@@ -27,8 +27,8 @@ class NativeLoaderTests {
         assertEquals("windows", NativeLoader.normalizeOs("Windows 11"));
         assertEquals("linux", NativeLoader.normalizeOs("Linux"));
         assertEquals("linux", NativeLoader.normalizeOs("Unix"));
-        assertEquals("macos", NativeLoader.normalizeOs("Mac OS X"));
-        assertEquals("macos", NativeLoader.normalizeOs("Darwin"));
+        assertEquals("osx", NativeLoader.normalizeOs("Mac OS X"));
+        assertEquals("osx", NativeLoader.normalizeOs("Darwin"));
     }
 
     @Test
@@ -82,5 +82,13 @@ class NativeLoaderTests {
                 System.setProperty("os.arch", oldArch);
             }
         }
+    }
+
+    @Test
+    void macArmResourcePathMatchesBundledLayout() {
+        // The file suffix depends on the JVM running the test, so only the directory is pinned here.
+        assertEquals(
+                Path.of("/native/osx/aarch64"),
+                NativeLoader.buildResourcePath("hs", "Mac OS X", "aarch64").getParent());
     }
 }
