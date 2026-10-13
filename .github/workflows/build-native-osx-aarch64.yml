@@ -27,7 +27,7 @@ jobs:
         working-directory: vectorscan
         run: |
           cmake -B build -GNinja -DBUILD_SHARED_LIBS=On -DCMAKE_BUILD_TYPE=Release -DFAT_RUNTIME=Off -DBUILD_BENCHMARKS=Off -DBUILD_UNIT=Off -DBUILD_TOOLS=Off -DBUILD_EXAMPLES=Off -DBUILD_DOC=Off
-          cmake --build build --config Release -- -j$(nproc)
+          cmake --build build --config Release --parallel "$(getconf _NPROCESSORS_ONLN)"
 
       - name: Copy Vectorscan shared library
         run: |
