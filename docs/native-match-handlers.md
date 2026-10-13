@@ -18,7 +18,6 @@ rather than one per match.
 - [The ABI contract](#the-abi-contract)
 - [Writing a handler](#writing-a-handler)
 - [Building your handler](#building-your-handler)
-- [Integrating it into your build](#integrating-it-into-your-build)
 - [Using it from Java](#using-it-from-java)
 - [Reading results back](#reading-results-back)
 - [Lifetime and ownership](#lifetime-and-ownership)
@@ -73,7 +72,7 @@ struct InitStruct {
     int32_t example_setting;
 };
 
-/* The state your handler keeps between matches. Java receives it through context(). */
+/* The state your handler keeps between matches. Access it in Java through your NativeMatchHandler's context(). */
 struct Context {
     uint64_t* example_context_state;
 };
@@ -101,7 +100,7 @@ void close(Context *ctx) {
 
 } /* extern "C" */
 
-/* Compile error if on_match does not have the signature vectorscan expects. */
+/* Add this line for a cheap compile time check if on_match has the signature vectorscan expects. */
 static int (*const on_match_check)(unsigned int, unsigned long long, unsigned long long,
                                    unsigned int, Context *) = on_match;
 ```
@@ -272,20 +271,6 @@ multiple scanners on multiple threads. Create one handler per thread.
 **Use `extern "C"` and the exact names `init`, `on_match` and `close`.** A function in a C++
 namespace, or one without `extern "C"`, gets a mangled name and will not be found. One handler per
 shared library, as described above.
-
-**Do not let C++ exceptions escape.** The entry points are called across boundaries that cannot
-unwind a C++ exception — `on_match` from vectorscan's C frames, `init` and `close` from the JVM
-through a downcall — and an escaping exception is undefined behaviour. Mark the functions `noexcept`
-to turn that into a deterministic `std::terminate`, or catch inside `on_match` and return non-zero to
-stop the scan instead.
-
-**Size buffers in the units you index them in.** If each match takes three `int32_t` slots, a buffer
-for `n` matches needs `3 * n * sizeof(int32_t)` bytes. An undersized buffer overflows into the heap,
-and the crash usually surfaces later inside `malloc` or `free` rather than where the bug is.
-
-**Match offsets follow vectorscan's rules.** `from` is only meaningful if the pattern was compiled
-with `SOM_LEFTMOST`; otherwise it is reported as `0`. Offsets are byte offsets into the scanned
-input, which for text scanned as UTF-8 are not character offsets.
 
 **The signature is trusted.** The JVM cannot verify a function's true ABI from its address. If
 `on_match` does not match `match_event_handler` exactly — including its `int` return type — the
