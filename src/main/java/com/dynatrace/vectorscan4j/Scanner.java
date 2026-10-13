@@ -59,10 +59,6 @@ abstract class Scanner implements AutoCloseable {
     /** Native scratch space, private to this scanner and mutated by every scan call. */
     protected final MemorySegment scratchNative;
 
-    /** Native context holding the match-collection buffer used by the batched path. */
-    protected final MemorySegment collectMatchCtx;
-
-    private int batchBufferCapacity = 0;
     private final Cleaner.Cleanable cleanable;
 
     protected Scanner(Database database) {
@@ -75,12 +71,9 @@ abstract class Scanner implements AutoCloseable {
                 throw new VectorscanException(ans);
             }
             scratchNative = scratchPtr.getAtIndex(C_POINTER, 0);
-
-            MemorySegment ctxPtr = temp.allocate(C_POINTER);
-            collectMatchCtx = ctxPtr.getAtIndex(C_POINTER, 0);
         }
 
-        this.cleanable = CLEANER.register(this, new CleanupState(scratchNative, collectMatchCtx, arena));
+        this.cleanable = CLEANER.register(this, new CleanupState(scratchNative, arena));
     }
 
     static class CallHandlerOnMatch implements VectorscanMatchHandler.Function {
@@ -94,12 +87,10 @@ abstract class Scanner implements AutoCloseable {
 
     protected static final class CleanupState implements Runnable {
         private final MemorySegment scratchNative;
-        private final MemorySegment collectMatchCtx;
         private final Arena arena;
 
-        private CleanupState(MemorySegment scratchNative, MemorySegment collectMatchCtx, Arena arena) {
+        private CleanupState(MemorySegment scratchNative, Arena arena) {
             this.scratchNative = scratchNative;
-            this.collectMatchCtx = collectMatchCtx;
             this.arena = arena;
         }
 
@@ -107,10 +98,6 @@ abstract class Scanner implements AutoCloseable {
         public void run() {
             try {
                 hs_free_scratch(scratchNative);
-            } catch (Throwable ignored) {
-            }
-            try {
-                free_context(collectMatchCtx);
             } catch (Throwable ignored) {
             }
             try {

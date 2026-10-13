@@ -129,18 +129,6 @@ public class NativeMatchHandlerTests {
         }
     }
 
-    long javaCount = 0;
-
-    void nativePrintHandler() {
-        Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_print_match.so");
-        NativeMatchHandler handler = new NativeMatchHandler(tempPath);
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        Database db = new Database(exprs, BLOCK_MODE);
-        BlockScanner scanner = new BlockScanner(db);
-        scanner.scan("Here is pattern1. You should get 1 match.", handler);
-        handler.close();
-    }
-
     @Test
     void nativeCountMatches() {
         Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_count_match.so");
@@ -149,10 +137,11 @@ public class NativeMatchHandlerTests {
         List<Expression> exprs = List.of(new Expression("pattern1"));
         Database db = new Database(exprs, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);
-        scanner.scan("Here is pattern1. You should get 1 match.", handler);
-        assertEquals(1, handler.context().get(ValueLayout.JAVA_INT, 0));
-        scanner.scan("Here is pattern1. You should get 1 match.", handler);
-        assertEquals(2, handler.context().get(ValueLayout.JAVA_INT, 0));
+        scanner.scan("pattern1 pattern1 pattern1", handler);
+        assertEquals(3, handler.context().get(ValueLayout.JAVA_INT, 0));
+        handler.context().set(ValueLayout.JAVA_INT, 0, 0);
+        scanner.scan("pattern1 pattern1 pattern1", handler);
+        assertEquals(3, handler.context().get(ValueLayout.JAVA_INT, 0));
         handler.close();
     }
 

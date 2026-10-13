@@ -122,8 +122,9 @@ For the scan method, you pass it an input plus an object implementing the MatchH
 1. The id of the expression that matched.
 2. The byte position of where the match started. Note that by default, Vectorscan does not keep track of this value, unless the pattern flag SOM_LEFTMOST is enabled.
 3. The byte position of where the match ended.
+
 The return value of the callback specifies whether you want the scanning to continue:
-Returning true will continue the scan, while returning false will return immediately.
+Returning true will continue the scan, returning false will stop the scan immediately.
 
 In this example, the provided MatchHandler increments the value inside an integer array, and then lets the scan continue.  
 
@@ -238,7 +239,7 @@ This is due to how the JVM handles exceptions thrown during native upcalls back 
 
 ### 4. Using the same Scanner concurrently from multiple threads
 
-A Scanner object maintains an internal scratch space, which is not safe to use from multiple threads. 
+A Scanner object maintains an internal scratch space, which is not safe to use from multiple threads.
 Using the same Scanner from multiple threads will throw a VectorscanException.
 
 ## Limitations
