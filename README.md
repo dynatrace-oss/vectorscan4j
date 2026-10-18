@@ -54,6 +54,10 @@ implementation "com.dynatrace.vectorscan4j:vectorscan4j:{latest-vectorscan4j-ver
 - **Java 25+** (uses the [Foreign Function & Memory API](https://docs.oracle.com/en/java/javase/25/core/foreign-function-and-memory-api.html))
 - **Linux** (x86-64 or aarch64), and Mac (aarch64) — native Vectorscan binaries are bundled inside the JAR
 
+The Linux binaries are built with Vectorscan's fat runtime. They pick the fastest instruction set the CPU supports when the
+library is first used, with no configuration needed: SSE4.2, AVX2, AVX512 and AVX512VBMI on x86-64, and NEON, SVE and SVE2 on
+aarch64. The macOS binary uses the default CPU target.
+
 ## Usage
 
 The usage of vectorscan4j for regex-pattern-matching is split up into multiple steps:
@@ -244,10 +248,10 @@ Using the same Scanner from multiple threads will throw a VectorscanException.
 
 ## Limitations
 
-### 1. Platform Support is currently Linux-Only
+### 1. Limited Platform Support
 
 Native Vectorscan supports multiple operating systems and CPU architectures (see the [official repository](https://github.com/VectorCamp/vectorscan)).  
-At the moment, `vectorscan4j` targets Linux only, on x86-64 and ARM-based CPUs (tested on Ubuntu).
+At the moment, `vectorscan4j` bundles binaries for Linux (x86-64 and aarch64) and macOS (aarch64 only). There is no macOS x86-64 binary yet.
 
 ### 2. Not all regex features are fully supported
  

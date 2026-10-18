@@ -2,6 +2,15 @@ name: Build native libraries (Linux aarch64)
 
 on:
   workflow_dispatch:
+    inputs:
+      cmake_args:
+        description: 'Arguments for "cmake -B build" when configuring Vectorscan'
+        required: false
+        default: '-DBUILD_SHARED_LIBS=On -DCMAKE_BUILD_TYPE=Release -DFAT_RUNTIME=On -DBUILD_BENCHMARKS=Off -DBUILD_UNIT=Off -DBUILD_TOOLS=Off -DBUILD_EXAMPLES=Off -DBUILD_DOC=Off'
+      output_name:
+        description: 'File name for the Vectorscan library under src/main/resources/native/linux/aarch64/'
+        required: false
+        default: 'libhs.so'
 
 jobs:
   build:
@@ -25,14 +34,18 @@ jobs:
 
       - name: Build Vectorscan
         working-directory: vectorscan
+        env:
+          CMAKE_ARGS: ${{ inputs.cmake_args }}
         run: |
-          cmake -B build -DBUILD_SHARED_LIBS=On -DCMAKE_BUILD_TYPE=Release -DFAT_RUNTIME=Off -DBUILD_BENCHMARKS=Off -DBUILD_UNIT=Off -DBUILD_TOOLS=Off -DBUILD_EXAMPLES=Off -DBUILD_DOC=Off
+          cmake -B build $CMAKE_ARGS
           cmake --build build --config Release --parallel "$(getconf _NPROCESSORS_ONLN)"
 
       - name: Copy Vectorscan shared library
+        env:
+          OUTPUT_NAME: ${{ inputs.output_name }}
         run: |
           mkdir -p src/main/resources/native/linux/aarch64/
-          cp vectorscan/build/lib/libhs.so src/main/resources/native/linux/aarch64/
+          cp vectorscan/build/lib/libhs.so "src/main/resources/native/linux/aarch64/$OUTPUT_NAME"
 
       - name: Build buffered match handler
         run: ./gradlew buildBufferedMatchHandler

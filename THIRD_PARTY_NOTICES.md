@@ -6,14 +6,21 @@ This project redistributes the following vectorscan binaries:
 
 - `src/main/resources/native/linux/x86_64/libhs.so`
 - `src/main/resources/native/linux/aarch64/libhs.so`
+- `src/main/resources/native/osx/aarch64/libhs.dylib`
 
 Upstream project:
 
 - <https://github.com/VectorCamp/vectorscan>
 
-These were built from the `main` branch of the upstream repository with `BUILD_SHARED_LIBS=On`,
-`FAT_RUNTIME=Off` and the default CPU target. The exact upstream commit was not recorded when the
-binaries were committed.
+The Linux binaries were built from the `main` branch of the upstream repository with
+`BUILD_SHARED_LIBS=On` and `FAT_RUNTIME=On`, so they contain several CPU-specific variants and
+select the best one at runtime. On x86-64 these are SSE4.2, AVX2, AVX512 and AVX512VBMI (plus a
+SIMDe fallback); on AArch64 they are NEON, SVE and SVE2.
+
+The macOS binary was built with `BUILD_SHARED_LIBS=On` and `FAT_RUNTIME=Off` at the default CPU
+target, because upstream's fat runtime is only supported on Linux.
+
+The exact upstream commit was not recorded when the binaries were committed.
 
 License notice:
 
