@@ -65,7 +65,7 @@ typedef struct hs_platform_info {
 } hs_platform_info_t;
 
 hs_error_t HS_CDECL hs_compile_multi(
-    const char *const *expressions,
+    const char *const *patterns,
     const unsigned int *flags,
     const unsigned int *ids,
     unsigned int elements, unsigned int mode,

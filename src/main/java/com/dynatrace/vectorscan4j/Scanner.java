@@ -239,11 +239,12 @@ abstract class Scanner implements AutoCloseable {
         if (buf.isDirect()) {
             return scan(MemorySegment.ofBuffer(buf), buf.remaining(), handler);
         } else {
-            ensureDataBuffer(buf.remaining());
+            int len = buf.remaining();
+            ensureDataBuffer(len);
             dataBuffer.clear();
-            dataBuffer.put(buf);
-            dataBuffer.flip();
-            return scan(dataSegment, dataBuffer.remaining(), handler);
+            dataBuffer.put(0, buf, buf.position(), len);
+            dataBuffer.limit(len);
+            return scan(dataSegment, len, handler);
         }
     }
 

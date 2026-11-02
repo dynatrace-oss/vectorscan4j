@@ -35,10 +35,10 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 
 public class DatabaseTests {
-    static final List<Expression> expressions = Arrays.asList(
-            new Expression("pattern1", EnumSet.of(SOM_LEFTMOST, CASELESS)),
-            new Expression("pattern2", EnumSet.of(SOM_LEFTMOST, CASELESS)),
-            new Expression("pattern3", EnumSet.of(SOM_LEFTMOST, CASELESS)));
+    static final List<Pattern> PATTERNS = Arrays.asList(
+            new Pattern("pattern1", EnumSet.of(SOM_LEFTMOST, CASELESS)),
+            new Pattern("pattern2", EnumSet.of(SOM_LEFTMOST, CASELESS)),
+            new Pattern("pattern3", EnumSet.of(SOM_LEFTMOST, CASELESS)));
     static int nMatches = 0;
 
     private final MatchHandler countMatch = (_, _, _) -> {
@@ -48,59 +48,59 @@ public class DatabaseTests {
 
     @Test
     void executionModes() {
-        var dbBlock = new Database(expressions, BLOCK_MODE);
-        var dbStream = new Database(expressions, STREAM_MODE);
+        var dbBlock = new Database(PATTERNS, BLOCK_MODE);
+        var dbStream = new Database(PATTERNS, STREAM_MODE);
         dbBlock.close();
         dbStream.close();
     }
 
     @Test
-    void emptyExpressions() {
-        // empty expression lists throw an exception
+    void emptyPatterns() {
+        // empty pattern lists throw an exception
         assertThrows(RuntimeException.class, () -> new Database(new ArrayList<>(), BLOCK_MODE).close());
     }
 
     @Test
     void invalidPatterns() {
-        // invalid expressions throw an exception
-        List<Expression> invalidExpr = List.of(new Expression(
+        // invalid patterns throw an exception
+        List<Pattern> invalidPattern = List.of(new Pattern(
                 "* is a quantifier with nothing in front of it -> should throw exception",
                 EnumSet.noneOf(PatternFlag.class)));
         assertThrows(RuntimeException.class, () -> {
-            var db = new Database(invalidExpr, BLOCK_MODE);
+            var db = new Database(invalidPattern, BLOCK_MODE);
             db.close();
         });
     }
 
     @Test
-    void getExpression() {
-        try (Database database = new Database(expressions, ExecutionMode.BLOCK_MODE)) {
-            Expression e = database.getExpression(2);
+    void getPattern() {
+        try (Database database = new Database(PATTERNS, ExecutionMode.BLOCK_MODE)) {
+            Pattern e = database.getPattern(2);
             assertEquals("pattern3", e.pattern());
             assertEquals(EnumSet.of(SOM_LEFTMOST, CASELESS), e.flags());
-            assertThrows(ArrayIndexOutOfBoundsException.class, () -> database.getExpression(-1));
-            assertThrows(ArrayIndexOutOfBoundsException.class, () -> database.getExpression(expressions.size()));
+            assertThrows(ArrayIndexOutOfBoundsException.class, () -> database.getPattern(-1));
+            assertThrows(ArrayIndexOutOfBoundsException.class, () -> database.getPattern(PATTERNS.size()));
         }
     }
 
     @Test
-    void modifyExpressions() {
-        List<Expression> expr = Arrays.asList(
-                new Expression("pat1", EnumSet.noneOf(PatternFlag.class)),
-                new Expression("pat2", EnumSet.noneOf(PatternFlag.class)));
-        try (Database database = new Database(expr, ExecutionMode.BLOCK_MODE)) {
-            expr.set(0, new Expression("pat3", EnumSet.noneOf(PatternFlag.class)));
+    void modifyPatterns() {
+        List<Pattern> patterns = Arrays.asList(
+                new Pattern("pat1", EnumSet.noneOf(PatternFlag.class)),
+                new Pattern("pat2", EnumSet.noneOf(PatternFlag.class)));
+        try (Database database = new Database(patterns, ExecutionMode.BLOCK_MODE)) {
+            patterns.set(0, new Pattern("pat3", EnumSet.noneOf(PatternFlag.class)));
         }
     }
 
     @Test
     void serializeDeserializeDatabase() {
         String input = "We have pat1 and pat2 int this input string.";
-        List<Expression> expressions = List.of(
-                new Expression("pat1", EnumSet.noneOf(PatternFlag.class)),
-                new Expression("pat2", EnumSet.noneOf(PatternFlag.class)));
+        List<Pattern> patterns = List.of(
+                new Pattern("pat1", EnumSet.noneOf(PatternFlag.class)),
+                new Pattern("pat2", EnumSet.noneOf(PatternFlag.class)));
 
-        try (Database database = new Database(expressions, ExecutionMode.BLOCK_MODE)) {
+        try (Database database = new Database(patterns, ExecutionMode.BLOCK_MODE)) {
             ByteArrayOutputStream bos = new ByteArrayOutputStream();
             database.serialize(bos);
             byte[] payload = bos.toByteArray();
@@ -108,9 +108,9 @@ public class DatabaseTests {
             Database roundTripDb = Database.deserialize(bis);
             assertEquals(database.getSize(), roundTripDb.getSize());
             assertEquals(database.getInfo(), roundTripDb.getInfo());
-            assertEquals(database.getNumExpressions(), roundTripDb.getNumExpressions());
+            assertEquals(database.getNumPatterns(), roundTripDb.getNumPatterns());
             assertEquals(database.getMode(), roundTripDb.getMode());
-            assertEquals(database.getExpression(1), roundTripDb.getExpression(1));
+            assertEquals(database.getPattern(1), roundTripDb.getPattern(1));
 
             BlockScanner scanner = new BlockScanner(database);
             BlockScanner roundTripScanner = new BlockScanner(roundTripDb);
@@ -128,18 +128,18 @@ public class DatabaseTests {
     @Test
     void serializeDeserializeStreamDatabaseFromByteArr() {
         String input = "We have pat1 and pat2 int this input string.";
-        List<Expression> expressions = List.of(
-                new Expression("pat1", EnumSet.noneOf(PatternFlag.class)),
-                new Expression("pat2", EnumSet.noneOf(PatternFlag.class)));
+        List<Pattern> patterns = List.of(
+                new Pattern("pat1", EnumSet.noneOf(PatternFlag.class)),
+                new Pattern("pat2", EnumSet.noneOf(PatternFlag.class)));
 
-        try (Database database = new Database(expressions, STREAM_MODE);
+        try (Database database = new Database(patterns, STREAM_MODE);
                 Database roundTripDb = Database.deserialize(database.serialize())) {
             assertEquals(database.getSize(), roundTripDb.getSize());
             assertEquals(database.getInfo(), roundTripDb.getInfo());
-            assertEquals(database.getNumExpressions(), roundTripDb.getNumExpressions());
+            assertEquals(database.getNumPatterns(), roundTripDb.getNumPatterns());
             assertEquals(database.getMode(), roundTripDb.getMode());
             assertEquals(database.modeNative, roundTripDb.modeNative);
-            assertEquals(database.getExpression(1), roundTripDb.getExpression(1));
+            assertEquals(database.getPattern(1), roundTripDb.getPattern(1));
 
             StreamScanner scanner = new StreamScanner(database);
             StreamScanner roundTripScanner = new StreamScanner(roundTripDb);
@@ -156,8 +156,8 @@ public class DatabaseTests {
 
     @Test
     void serializeThrowsUncheckedIOException() throws IOException {
-        List<Expression> expressions = List.of(new Expression("test"));
-        try (Database db = new Database(expressions, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("test"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 // Create a custom OutputStream that fails during write
                 OutputStream failingStream = new OutputStream() {
                     @Override
@@ -184,15 +184,15 @@ public class DatabaseTests {
 
     @Test
     void deserializeWrapsClassNotFoundException() {
-        List<Expression> exprs = List.of(new Expression("pat1"));
+        List<Pattern> patterns = List.of(new Pattern("pat1"));
 
         byte[] bytes;
-        try (Database db = new Database(exprs, BLOCK_MODE)) {
+        try (Database db = new Database(patterns, BLOCK_MODE)) {
             bytes = db.serialize();
         }
 
-        byte[] original = "com.dynatrace.vectorscan4j.Expression".getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        byte[] patched = "com.dynatrace.vectorscan4j.ExpressioX".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] original = "com.dynatrace.vectorscan4j.Pattern".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        byte[] patched = "com.dynatrace.vectorscan4j.PatterX".getBytes(java.nio.charset.StandardCharsets.UTF_8);
         assertEquals(original.length, patched.length);
 
         int pos = indexOf(bytes, original);
@@ -222,7 +222,7 @@ public class DatabaseTests {
 
     @Test
     void deserializeInvalidByteSequence() throws IOException, ClassNotFoundException {
-        try (Database db = new Database(expressions, BLOCK_MODE)) {
+        try (Database db = new Database(PATTERNS, BLOCK_MODE)) {
             byte[] dbBytes = db.serialize();
 
             // in order to make db invalid, we first figure out the serialized database's byte offset
@@ -231,8 +231,8 @@ public class DatabaseTests {
             ObjectInputStream ois = new ObjectInputStream(bis);
 
             // same read order as Database.deserialize(...)
-            int nExpressions = dis.readInt();
-            for (int i = 0; i < nExpressions; i++) {
+            int nPatterns = dis.readInt();
+            for (int i = 0; i < nPatterns; i++) {
                 ois.readObject();
             }
             dis.readInt(); // mode ordinal
@@ -250,33 +250,33 @@ public class DatabaseTests {
 
     @Test
     void closeDatabaseIsIdempotent() {
-        Database db = new Database(expressions, BLOCK_MODE);
+        Database db = new Database(PATTERNS, BLOCK_MODE);
         db.close();
         assertDoesNotThrow(db::close);
     }
 
     @Test
     void serializeAfterClose() {
-        Database db = new Database(expressions, STREAM_MODE);
+        Database db = new Database(PATTERNS, STREAM_MODE);
         db.close();
         assertThrows(IllegalStateException.class, db::serialize);
     }
 
     @Test
-    void expressionsAreDefensivelyCopied() {
-        List<Expression> mutable = new ArrayList<>(List.of(new Expression("pat1"), new Expression("pat2")));
+    void patternsAreDefensivelyCopied() {
+        List<Pattern> mutable = new ArrayList<>(List.of(new Pattern("pat1"), new Pattern("pat2")));
 
         try (Database db = new Database(mutable, BLOCK_MODE)) {
             BlockScanner scannerBefore = new BlockScanner(db);
 
             // Mutate the original list after database creation
-            mutable.set(0, new Expression("REPLACED"));
-            mutable.add(new Expression("pat3"));
+            mutable.set(0, new Pattern("REPLACED"));
+            mutable.add(new Pattern("pat3"));
 
-            // The database should still reflect the original expressions
-            assertEquals(2, db.getNumExpressions());
-            assertEquals("pat1", db.getExpression(0).pattern());
-            assertEquals("pat2", db.getExpression(1).pattern());
+            // The database should still reflect the original patterns
+            assertEquals(2, db.getNumPatterns());
+            assertEquals("pat1", db.getPattern(0).pattern());
+            assertEquals("pat2", db.getPattern(1).pattern());
 
             // Scanners created before and after mutations should find the same patterns
             BlockScanner scannerAfter = new BlockScanner(db);
@@ -305,7 +305,7 @@ public class DatabaseTests {
 
     @Test
     void operationsOnInvalidDb() {
-        try (Database db = new Database(expressions, STREAM_MODE)) {
+        try (Database db = new Database(PATTERNS, STREAM_MODE)) {
             // flip the first byte in the native database, to make the encoded DB invalid
             byte b0 = db.dbNative.get(JAVA_BYTE, 0);
             db.dbNative.set(JAVA_BYTE, 0, (byte) (b0 ^ 0xFF));
@@ -326,7 +326,7 @@ public class DatabaseTests {
 
     @Test
     void notClosingStillFreesMemory() throws InterruptedException {
-        Database db = new Database(expressions, BLOCK_MODE);
+        Database db = new Database(PATTERNS, BLOCK_MODE);
         WeakReference<Database> dbRef = new WeakReference<>(db);
         assertNotNull(dbRef.get(), "Database was freed pre-emptively.");
         db = null;
@@ -338,11 +338,11 @@ public class DatabaseTests {
 
     @Test
     void useDatabaseFromMultipleThreads() throws Exception {
-        List<Expression> exprs = List.of(new Expression("pat1"), new Expression("pat2"));
+        List<Pattern> patterns = List.of(new Pattern("pat1"), new Pattern("pat2"));
         String input = "pat1 xx pat1 yy pat1";
 
         int nThreads = 256;
-        Database db = new Database(exprs, BLOCK_MODE);
+        Database db = new Database(patterns, BLOCK_MODE);
         List<BlockScanner> scanners =
                 Stream.generate(() -> new BlockScanner(db)).limit(nThreads).toList();
         CyclicBarrier allMatched = new CyclicBarrier(nThreads);

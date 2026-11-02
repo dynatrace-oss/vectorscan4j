@@ -29,24 +29,24 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 public class StreamScannerTests {
-    static final List<Expression> expressions = Arrays.asList(
-            new Expression("pattern1", EnumSet.of(SOM_LEFTMOST, CASELESS)),
-            new Expression("pattern2", EnumSet.of(SOM_LEFTMOST, CASELESS)),
-            new Expression("pattern3", EnumSet.of(SOM_LEFTMOST, CASELESS)));
+    static final List<Pattern> PATTERNS = Arrays.asList(
+            new Pattern("pattern1", EnumSet.of(SOM_LEFTMOST, CASELESS)),
+            new Pattern("pattern2", EnumSet.of(SOM_LEFTMOST, CASELESS)),
+            new Pattern("pattern3", EnumSet.of(SOM_LEFTMOST, CASELESS)));
     static int nMatches = 0;
 
     MatchHandler doNothing = (_, _, _) -> true;
 
     @Test
     void databaseWrongMode() {
-        Database db = new Database(expressions, ExecutionMode.BLOCK_MODE);
+        Database db = new Database(PATTERNS, ExecutionMode.BLOCK_MODE);
         assertThrows(IllegalArgumentException.class, () -> new StreamScanner(db));
         db.close();
     }
 
     @Test
     void matchCanSpanMultipleScans() {
-        try (Database db = new Database(expressions, STREAM_MODE);
+        try (Database db = new Database(PATTERNS, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             List<Integer> matchIds = new ArrayList<>();
             MatchHandler collectMatches = (id, _, _) -> {
@@ -63,7 +63,7 @@ public class StreamScannerTests {
 
     @Test
     void resetStreamPreventsMatchAcrossScans() {
-        try (Database db = new Database(expressions, STREAM_MODE);
+        try (Database db = new Database(PATTERNS, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             List<Integer> matchIds = new ArrayList<>();
             MatchHandler collectMatches = (id, _, _) -> {
@@ -81,7 +81,7 @@ public class StreamScannerTests {
 
     @Test
     void closeAndReopenStreamPreventsMatchAcrossScans() {
-        try (Database db = new Database(expressions, STREAM_MODE);
+        try (Database db = new Database(PATTERNS, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             List<Integer> matchIds = new ArrayList<>();
             MatchHandler collectMatches = (id, _, _) -> {
@@ -101,7 +101,7 @@ public class StreamScannerTests {
     @Test
     void earlystopScan() {
         // if a MatchHandler returns false, the execution of the engine stops early.
-        try (Database db = new Database(expressions, STREAM_MODE);
+        try (Database db = new Database(PATTERNS, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             MatchHandler countMatchAndStop = (_, _, _) -> {
                 nMatches += 1;
@@ -125,7 +125,7 @@ public class StreamScannerTests {
 
     @Test
     void scanAfterClosingDatabase() {
-        Database db = new Database(expressions, STREAM_MODE);
+        Database db = new Database(PATTERNS, STREAM_MODE);
         StreamScanner scanner = new StreamScanner(db);
         db.close();
         assertThrows(IllegalStateException.class, () -> scanner.scan("Test", doNothing));
@@ -133,7 +133,7 @@ public class StreamScannerTests {
 
     @Test
     void scanAfterClosingStream() {
-        try (Database db = new Database(expressions, STREAM_MODE);
+        try (Database db = new Database(PATTERNS, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             scanner.closeStream(doNothing);
             assertFalse(scanner.isStreamOpen());
@@ -143,7 +143,7 @@ public class StreamScannerTests {
 
     @Test
     void closeScanner() {
-        try (Database db = new Database(expressions, STREAM_MODE);
+        try (Database db = new Database(PATTERNS, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             List<Integer> matchIds = new ArrayList<>();
             MatchHandler collectMatches = (id, _, _) -> {
@@ -157,7 +157,7 @@ public class StreamScannerTests {
 
     @Test
     void closeStreamScannerIsIdempotent() {
-        try (Database db = new Database(expressions, STREAM_MODE)) {
+        try (Database db = new Database(PATTERNS, STREAM_MODE)) {
             StreamScanner scanner = new StreamScanner(db);
             assertDoesNotThrow(scanner::close);
             assertDoesNotThrow(scanner::close);
@@ -166,7 +166,7 @@ public class StreamScannerTests {
 
     @Test
     void openStreamIsIdempotent() {
-        try (Database db = new Database(expressions, STREAM_MODE);
+        try (Database db = new Database(PATTERNS, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             scanner.openStream();
             assertTrue(scanner.isStreamOpen());
@@ -177,7 +177,7 @@ public class StreamScannerTests {
 
     @Test
     void resetStreamIsIdempotent() {
-        try (Database db = new Database(expressions, STREAM_MODE);
+        try (Database db = new Database(PATTERNS, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             scanner.resetStream(doNothing);
             assertTrue(scanner.isStreamOpen());
@@ -188,7 +188,7 @@ public class StreamScannerTests {
 
     @Test
     void closeStreamIsIdempotent() {
-        try (Database db = new Database(expressions, STREAM_MODE);
+        try (Database db = new Database(PATTERNS, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             assertTrue(scanner.isStreamOpen());
             scanner.closeStream(doNothing);
@@ -200,7 +200,7 @@ public class StreamScannerTests {
 
     @Test
     void scannerOperationsWithInvalidDb() {
-        try (Database db = new Database(expressions, STREAM_MODE);
+        try (Database db = new Database(PATTERNS, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
 
             // make the fifth byte in the native scratch space non-zero -> marks the scratch space as "being currently
@@ -218,10 +218,10 @@ public class StreamScannerTests {
 
     @Test
     void closingStreamScannerSkipsLastMatches() {
-        List<Expression> exprs = List.of(new Expression("pattern1$"));
+        List<Pattern> patterns = List.of(new Pattern("pattern1$"));
 
         // Explicit closeStream(handler): deferred end-of-stream match is delivered to handler.
-        try (Database db = new Database(exprs, STREAM_MODE);
+        try (Database db = new Database(patterns, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             List<Integer> matchIds = new ArrayList<>();
             MatchHandler collectMatches = (id, _, _) -> {
@@ -238,7 +238,7 @@ public class StreamScannerTests {
 
         // Closing StreamScanner itself uses its internal close handler, so user handler sees no final event.
         List<Integer> userObserved = new ArrayList<>();
-        try (Database db = new Database(exprs, STREAM_MODE);
+        try (Database db = new Database(patterns, STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             MatchHandler collectMatches = (id, _, _) -> {
                 userObserved.add(id);
@@ -255,7 +255,7 @@ public class StreamScannerTests {
 
     @Test
     void scanReportsWhetherItCompleted() {
-        try (Database db = new Database(List.of(new Expression("pattern1")), STREAM_MODE);
+        try (Database db = new Database(List.of(new Pattern("pattern1")), STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             assertTrue(scanner.scan("pattern1 pattern1", doNothing));
             assertFalse(scanner.scan("pattern1 pattern1", (_, _, _) -> false));

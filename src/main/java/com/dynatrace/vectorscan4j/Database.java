@@ -32,7 +32,7 @@ import java.util.List;
 /**
  * A compiled pattern database for use with vectorscan scanners.
  *
- * <p>A {@code Database} is created by compiling one or more {@link Expression} objects together with
+ * <p>A {@code Database} is created by compiling one or more {@link Pattern} objects together with
  * an {@link ExecutionMode}. The resulting automaton is stored in off-heap (native) memory managed by
  * vectorscan. The database is immutable after compilation and can be safely shared across multiple
  * scanner instances and threads.
@@ -57,8 +57,8 @@ public class Database implements AutoCloseable {
     /** The vectorscan execution mode this database was compiled for, as its native flag value. */
     protected final int modeNative;
 
-    /** The expressions this database was compiled from; their order defines the reported match ids. */
-    protected final List<Expression> expressions;
+    /** The patterns this database was compiled from; their order defines the reported match ids. */
+    protected final List<Pattern> patterns;
 
     private final ExecutionMode mode;
     private final Cleaner.Cleanable cleanable;
@@ -74,30 +74,29 @@ public class Database implements AutoCloseable {
     }
 
     /**
-     * Compiles a new database from the given expressions and execution mode.
+     * Compiles a new database from the given patterns and execution mode.
      *
-     * @param expressions list of patterns to compile; each is assigned an id equal to its list index
+     * @param patterns list of patterns to compile; each is assigned an id equal to its list index
      * @param executionMode whether the database targets {@link ExecutionMode#BLOCK_MODE block} or
      *     {@link ExecutionMode#STREAM_MODE stream} scanning
-     * @throws RuntimeException if any expression fails to compile (the message includes the
+     * @throws RuntimeException if any pattern fails to compile (the message includes the
      *     offending pattern id and vectorscan's error description)
      */
-    public Database(List<Expression> expressions, ExecutionMode executionMode) {
+    public Database(List<Pattern> patterns, ExecutionMode executionMode) {
         try (Arena temp = Arena.ofConfined()) {
-            this.expressions =
-                    List.copyOf(expressions); // copy the expressions, so they can't get changed from the outside
+            this.patterns = List.copyOf(patterns); // copy the patterns, so they can't get changed from the outside
             this.mode = executionMode;
             this.modeNative = executionMode.equals(ExecutionMode.BLOCK_MODE) ? 1 : 2 + (1 << 24);
             // allocate all required function arguments for database compilation as MemorySegments
-            int nElems = this.expressions.size();
-            MemorySegment patterns = temp.allocate(C_POINTER, nElems);
+            int nElems = this.patterns.size();
+            MemorySegment patternPtrs = temp.allocate(C_POINTER, nElems);
             MemorySegment flags = temp.allocate(C_INT, nElems);
             MemorySegment ids = temp.allocate(C_INT, nElems);
             for (int i = 0; i < nElems; i++) {
-                Expression expression = this.expressions.get(i);
-                MemorySegment pattern = temp.allocateFrom(expression.pattern());
-                patterns.setAtIndex(C_POINTER, i, pattern);
-                flags.setAtIndex(C_INT, i, expression.value());
+                Pattern pattern = this.patterns.get(i);
+                MemorySegment patternPtr = temp.allocateFrom(pattern.pattern());
+                patternPtrs.setAtIndex(C_POINTER, i, patternPtr);
+                flags.setAtIndex(C_INT, i, pattern.value());
                 ids.setAtIndex(C_INT, i, i);
             }
             MemorySegment dbPtr = temp.allocate(C_POINTER);
@@ -105,12 +104,12 @@ public class Database implements AutoCloseable {
 
             // compile
             var platform = MemorySegment.NULL;
-            int ans = hs_compile_multi(patterns, flags, ids, nElems, modeNative, platform, dbPtr, errorPtr);
+            int ans = hs_compile_multi(patternPtrs, flags, ids, nElems, modeNative, platform, dbPtr, errorPtr);
             if (ans == HS_COMPILER_ERROR.getCode()) {
                 var compileError = errorPtr.getAtIndex(C_POINTER, 0);
-                int exprId = VectorscanCompileError.expression(compileError);
+                int patternId = VectorscanCompileError.expression(compileError);
                 String msg = VectorscanCompileError.message(compileError).getString(0);
-                throw new RuntimeException(String.format("Unable to compile pattern with id %d: %s", exprId, msg));
+                throw new RuntimeException(String.format("Unable to compile pattern with id %d: %s", patternId, msg));
             }
 
             int _ = hs_free_compile_error(errorPtr.getAtIndex(C_POINTER, 0));
@@ -120,9 +119,9 @@ public class Database implements AutoCloseable {
         }
     }
 
-    private Database(MemorySegment dbNative, List<Expression> expressions, ExecutionMode mode) {
+    private Database(MemorySegment dbNative, List<Pattern> patterns, ExecutionMode mode) {
         this.dbNative = dbNative;
-        this.expressions = List.copyOf(expressions);
+        this.patterns = List.copyOf(patterns);
         this.mode = mode;
         this.modeNative = mode.equals(ExecutionMode.BLOCK_MODE) ? 1 : 2 + (1 << 24);
 
@@ -151,7 +150,7 @@ public class Database implements AutoCloseable {
     /**
      * Serializes this database to the given output stream.
      *
-     * <p>The output contains the expression metadata followed by the native database bytes. It can
+     * <p>The output contains the pattern metadata followed by the native database bytes. It can
      * be restored with {@link #deserialize(InputStream)}.
      *
      * @param os destination stream
@@ -166,8 +165,8 @@ public class Database implements AutoCloseable {
         try {
             DataOutputStream dos = new DataOutputStream(os);
             ObjectOutputStream oos = new ObjectOutputStream(dos);
-            dos.writeInt(expressions.size());
-            for (Expression e : expressions) {
+            dos.writeInt(patterns.size());
+            for (Pattern e : patterns) {
                 oos.writeObject(e);
             }
             dos.writeInt(mode.ordinal());
@@ -205,10 +204,10 @@ public class Database implements AutoCloseable {
         try (Arena temp = Arena.ofConfined()) {
             DataInputStream dis = new DataInputStream(is);
             ObjectInputStream ois = new ObjectInputStream(is);
-            int nExpressions = dis.readInt();
-            List<Expression> expressions = new ArrayList<>();
-            for (int i = 0; i < nExpressions; i++) {
-                expressions.add((Expression) ois.readObject());
+            int nPatterns = dis.readInt();
+            List<Pattern> patterns = new ArrayList<>();
+            for (int i = 0; i < nPatterns; i++) {
+                patterns.add((Pattern) ois.readObject());
             }
             ExecutionMode mode = ExecutionMode.values()[(dis.readInt())];
             byte[] dbBytes = is.readAllBytes();
@@ -222,7 +221,7 @@ public class Database implements AutoCloseable {
                 throw new VectorscanException(ans);
             }
             MemorySegment dbNative = dbPtr.getAtIndex(C_POINTER, 0);
-            return new Database(dbNative, expressions, mode);
+            return new Database(dbNative, patterns, mode);
         } catch (ClassNotFoundException e) {
             throw new RuntimeException(e);
         } catch (IOException e) {
@@ -296,23 +295,23 @@ public class Database implements AutoCloseable {
     }
 
     /**
-     * Returns the expression at the given index.
+     * Returns the pattern at the given index.
      *
-     * @param index zero-based expression id
-     * @return the expression
+     * @param index zero-based pattern id
+     * @return the pattern
      * @throws IndexOutOfBoundsException if the index is out of range
      */
-    public Expression getExpression(int index) {
-        return expressions.get(index);
+    public Pattern getPattern(int index) {
+        return patterns.get(index);
     }
 
     /**
-     * Returns the number of expressions compiled into this database.
+     * Returns the number of patterns compiled into this database.
      *
-     * @return expression count
+     * @return pattern count
      */
-    public int getNumExpressions() {
-        return expressions.size();
+    public int getNumPatterns() {
+        return patterns.size();
     }
 
     /**

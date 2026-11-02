@@ -49,13 +49,13 @@ public class PatternFlagsTests {
 
     @Test
     void caseless() {
-        try (Database dbWithout = new Database(List.of(new Expression("hello")), BLOCK_MODE);
+        try (Database dbWithout = new Database(List.of(new Pattern("hello")), BLOCK_MODE);
                 BlockScanner without = new BlockScanner(dbWithout)) {
             // without CASELESS: only the exact lower-case form matches
             assertEquals(1, matchIds(without, "hello HELLO Hello").size());
         }
 
-        try (Database dbWith = new Database(List.of(new Expression("hello", EnumSet.of(CASELESS))), BLOCK_MODE);
+        try (Database dbWith = new Database(List.of(new Pattern("hello", EnumSet.of(CASELESS))), BLOCK_MODE);
                 BlockScanner with = new BlockScanner(dbWith)) {
             // CASELESS: all three capitalization variants match
             assertEquals(3, matchIds(with, "hello HELLO Hello").size());
@@ -67,14 +67,13 @@ public class PatternFlagsTests {
         // caseless also affects lower/upper-case pairs of non-ASCII characters
         byte[] eAcuteUpper = "É".getBytes(StandardCharsets.UTF_8);
 
-        try (Database dbCaselessOnly = new Database(List.of(new Expression("é", EnumSet.of(CASELESS))), BLOCK_MODE);
+        try (Database dbCaselessOnly = new Database(List.of(new Pattern("é", EnumSet.of(CASELESS))), BLOCK_MODE);
                 BlockScanner caselessOnly = new BlockScanner(dbCaselessOnly)) {
             // CASELESS alone (without UTF8 or UCP) operates in byte/ASCII mode — it only folds [A-Za-z].
             assertTrue(matchIds(caselessOnly, eAcuteUpper).isEmpty());
         }
 
-        try (Database dbCaselessUcp =
-                        new Database(List.of(new Expression("é", EnumSet.of(CASELESS, UTF8))), BLOCK_MODE);
+        try (Database dbCaselessUcp = new Database(List.of(new Pattern("é", EnumSet.of(CASELESS, UTF8))), BLOCK_MODE);
                 BlockScanner caselessUcp = new BlockScanner(dbCaselessUcp)) {
             // CASELESS | UTF8: UTF8 enables Unicode character properties.
             // Unicode case-folding now applies, so "é" matches "É".
@@ -88,13 +87,13 @@ public class PatternFlagsTests {
 
         // (?i) enables caseless for "ab" and (?-i) then disables it again for "cd".
         // This should work the same regardless of the global CASELESS compile flag.
-        try (Database dbWithoutCaseFlag = new Database(List.of(new Expression("(?i)ab(?-i)cd")), BLOCK_MODE);
+        try (Database dbWithoutCaseFlag = new Database(List.of(new Pattern("(?i)ab(?-i)cd")), BLOCK_MODE);
                 BlockScanner withoutCaseFlag = new BlockScanner(dbWithoutCaseFlag)) {
             assertEquals(2, matchIds(withoutCaseFlag, input).size());
         }
 
         try (Database dbWithCaseFlag =
-                        new Database(List.of(new Expression("(?i)ab(?-i)cd", EnumSet.of(CASELESS))), BLOCK_MODE);
+                        new Database(List.of(new Pattern("(?i)ab(?-i)cd", EnumSet.of(CASELESS))), BLOCK_MODE);
                 BlockScanner withCaseFlag = new BlockScanner(dbWithCaseFlag)) {
             // Matches: "ABcd", "abcd".
             // Non-matches: "ABCD", "abCD" because (?-i) enforces case-sensitive "cd".
@@ -104,7 +103,7 @@ public class PatternFlagsTests {
 
     @Test
     void dotAll() {
-        try (Database dbWithout = new Database(List.of(new Expression("a.b")), BLOCK_MODE);
+        try (Database dbWithout = new Database(List.of(new Pattern("a.b")), BLOCK_MODE);
                 BlockScanner without = new BlockScanner(dbWithout)) {
             // without DOTALL: "." does NOT match \n → no match
             assertTrue(matchIds(without, "a\nb").isEmpty());
@@ -113,7 +112,7 @@ public class PatternFlagsTests {
             assertEquals(1, matchIds(without, "a b").size());
         }
 
-        try (Database dbWith = new Database(List.of(new Expression("a.b", EnumSet.of(DOTALL))), BLOCK_MODE);
+        try (Database dbWith = new Database(List.of(new Pattern("a.b", EnumSet.of(DOTALL))), BLOCK_MODE);
                 BlockScanner with = new BlockScanner(dbWith)) {
             // DOTALL: "." matches the newline character → "a\nb" matches
             assertEquals(1, matchIds(with, "a\nb").size());
@@ -122,7 +121,7 @@ public class PatternFlagsTests {
 
     @Test
     void multiline() {
-        try (Database dbWithout = new Database(List.of(new Expression("^foo")), BLOCK_MODE);
+        try (Database dbWithout = new Database(List.of(new Pattern("^foo")), BLOCK_MODE);
                 BlockScanner without = new BlockScanner(dbWithout)) {
             // "foo" at the very start of the input – both modes match
             assertEquals(1, matchIds(without, "foo bar").size());
@@ -130,7 +129,7 @@ public class PatternFlagsTests {
             assertTrue(matchIds(without, "bar\nfoo").isEmpty());
         }
 
-        try (Database dbWith = new Database(List.of(new Expression("^foo", EnumSet.of(MULTILINE))), BLOCK_MODE);
+        try (Database dbWith = new Database(List.of(new Pattern("^foo", EnumSet.of(MULTILINE))), BLOCK_MODE);
                 BlockScanner with = new BlockScanner(dbWith)) {
             // "foo" at the very start of the input – both modes match
             assertEquals(1, matchIds(with, "foo bar").size());
@@ -141,13 +140,13 @@ public class PatternFlagsTests {
 
     @Test
     void singleMatch() {
-        try (Database dbWithout = new Database(List.of(new Expression("a")), BLOCK_MODE);
+        try (Database dbWithout = new Database(List.of(new Pattern("a")), BLOCK_MODE);
                 BlockScanner without = new BlockScanner(dbWithout)) {
             // without SINGLEMATCH: all three occurrences generate a callback
             assertEquals(3, matchIds(without, "aaa").size());
         }
 
-        try (Database dbWith = new Database(List.of(new Expression("a", EnumSet.of(SINGLEMATCH))), BLOCK_MODE);
+        try (Database dbWith = new Database(List.of(new Pattern("a", EnumSet.of(SINGLEMATCH))), BLOCK_MODE);
                 BlockScanner with = new BlockScanner(dbWith)) {
             // SINGLEMATCH: only the first match is reported, regardless of further occurrences
             assertEquals(1, matchIds(with, "aaa").size());
@@ -158,11 +157,11 @@ public class PatternFlagsTests {
     void singleMatchPerPattern() {
         // With SINGLEMATCH each pattern fires at most once, regardless of how many times it occurs.
         // Two patterns, each appearing twice → exactly 2 callbacks total (one per pattern).
-        List<Expression> exprs = List.of(
-                new Expression("foo", EnumSet.of(SINGLEMATCH)), // id=0, appears twice
-                new Expression("bar", EnumSet.of(SINGLEMATCH)) // id=1, appears twice
+        List<Pattern> patterns = List.of(
+                new Pattern("foo", EnumSet.of(SINGLEMATCH)), // id=0, appears twice
+                new Pattern("bar", EnumSet.of(SINGLEMATCH)) // id=1, appears twice
                 );
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             List<Integer> ids = matchIds(scanner, "foo bar foo bar");
             assertEquals(2, ids.size());
@@ -174,12 +173,12 @@ public class PatternFlagsTests {
     void allowEmpty() {
         // "a*" can match an empty string → compilation fails without HS_FLAG_ALLOWEMPTY
         assertThrows(RuntimeException.class, () -> {
-            Database db = new Database(List.of(new Expression("a*")), BLOCK_MODE);
+            Database db = new Database(List.of(new Pattern("a*")), BLOCK_MODE);
             db.close();
         });
 
         // with HS_FLAG_ALLOWEMPTY the same pattern compiles and works correctly
-        try (Database db = new Database(List.of(new Expression("a*", EnumSet.of(ALLOWEMPTY))), BLOCK_MODE);
+        try (Database db = new Database(List.of(new Pattern("a*", EnumSet.of(ALLOWEMPTY))), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             assertFalse(matchIds(scanner, "aaa").isEmpty());
         }
@@ -191,13 +190,13 @@ public class PatternFlagsTests {
         byte[] cafe = "café".getBytes(StandardCharsets.UTF_8);
         assertEquals(5, cafe.length);
 
-        try (Database dbWithout = new Database(List.of(new Expression(".")), BLOCK_MODE);
+        try (Database dbWithout = new Database(List.of(new Pattern(".")), BLOCK_MODE);
                 BlockScanner without = new BlockScanner(dbWithout)) {
             // byte mode: "." matches each raw byte → 5 matches (é occupies 2 bytes)
             assertEquals(5, matchIds(without, cafe).size());
         }
 
-        try (Database dbWith = new Database(List.of(new Expression(".", EnumSet.of(UTF8))), BLOCK_MODE);
+        try (Database dbWith = new Database(List.of(new Pattern(".", EnumSet.of(UTF8))), BLOCK_MODE);
                 BlockScanner with = new BlockScanner(dbWith)) {
             // UTF8 mode: "." matches each Unicode code point → 4 matches (c, a, f, é)
             assertEquals(4, matchIds(with, cafe).size());
@@ -210,14 +209,14 @@ public class PatternFlagsTests {
 
         byte[] eAccent = "é".getBytes(StandardCharsets.UTF_8);
 
-        try (Database dbWithout = new Database(List.of(new Expression("\\w", EnumSet.of(UTF8))), BLOCK_MODE);
+        try (Database dbWithout = new Database(List.of(new Pattern("\\w", EnumSet.of(UTF8))), BLOCK_MODE);
                 BlockScanner without = new BlockScanner(dbWithout)) {
             // without UCP: \w is ASCII-only [a-zA-Z0-9_] → "é" does not match
             assertTrue(matchIds(without, eAccent).isEmpty());
         }
 
         // HS_FLAG_UCP alone is sufficient — it implicitly enables UTF-8 decoding internally
-        try (Database dbWith = new Database(List.of(new Expression("\\w", EnumSet.of(UCP))), BLOCK_MODE);
+        try (Database dbWith = new Database(List.of(new Pattern("\\w", EnumSet.of(UCP))), BLOCK_MODE);
                 BlockScanner with = new BlockScanner(dbWith)) {
             // UCP: \w uses Unicode properties → matches the Unicode letter "é" (one code point)
             assertEquals(1, matchIds(with, eAccent).size());
@@ -228,13 +227,13 @@ public class PatternFlagsTests {
     void prefilterBackreferences() {
         // Backreferences are unsupported in vectorscan; compilation fails without PREFILTER
         assertThrows(RuntimeException.class, () -> {
-            Database db = new Database(List.of(new Expression("(a)\\1")), BLOCK_MODE);
+            Database db = new Database(List.of(new Pattern("(a)\\1")), BLOCK_MODE);
             db.close();
         });
 
         // however with PREFILTER, vectorscan compiles a superset approximation:
         // no false negatives – every true match of the original pattern is still reported
-        try (Database db = new Database(List.of(new Expression("(a)\\1", EnumSet.of(PREFILTER))), BLOCK_MODE);
+        try (Database db = new Database(List.of(new Pattern("(a)\\1", EnumSet.of(PREFILTER))), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             // "aa" is a genuine match of "(a)\1" and must be found by the approximation
             assertEquals(List.of(0), matchIds(scanner, "aa"));
@@ -245,13 +244,13 @@ public class PatternFlagsTests {
     void prefilterLookahead() {
         // Lookaheads are unsupported in vectorscan; compilation fails without PREFILTER
         assertThrows(RuntimeException.class, () -> {
-            Database db = new Database(List.of(new Expression("foo(?=bar)")), BLOCK_MODE);
+            Database db = new Database(List.of(new Pattern("foo(?=bar)")), BLOCK_MODE);
             db.close();
         });
 
         // however with PREFILTER, vectorscan compiles a superset approximation:
         // no false negatives – every true match of the original pattern is still reported
-        try (Database db = new Database(List.of(new Expression("foo(?=bar)", EnumSet.of(PREFILTER))), BLOCK_MODE);
+        try (Database db = new Database(List.of(new Pattern("foo(?=bar)", EnumSet.of(PREFILTER))), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             // "foobar" is a genuine match of "foo(?=bar)" and must be found by the approximation
             assertEquals(List.of(0), matchIds(scanner, "foobar"));
@@ -262,13 +261,13 @@ public class PatternFlagsTests {
     void prefilterLookbehind() {
         // Lookbehinds are unsupported in vectorscan; compilation fails without PREFILTER
         assertThrows(RuntimeException.class, () -> {
-            Database db = new Database(List.of(new Expression("(?<=foo)bar")), BLOCK_MODE);
+            Database db = new Database(List.of(new Pattern("(?<=foo)bar")), BLOCK_MODE);
             db.close();
         });
 
         // however with PREFILTER, vectorscan compiles a superset approximation:
         // no false negatives – every true match of the original pattern is still reported
-        try (Database db = new Database(List.of(new Expression("(?<=foo)bar", EnumSet.of(PREFILTER))), BLOCK_MODE);
+        try (Database db = new Database(List.of(new Pattern("(?<=foo)bar", EnumSet.of(PREFILTER))), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             // "foobar" is a genuine match of "(?<=foo)bar" and must be found by the approximation
             assertEquals(List.of(0), matchIds(scanner, "foobar"));
@@ -278,7 +277,7 @@ public class PatternFlagsTests {
     @Test
     void somLeftmost() {
         // By default, vectorscan does not keep track of the starting offset of a match - instead it reports 0.
-        try (Database dbWithout = new Database(List.of(new Expression("hello")), BLOCK_MODE);
+        try (Database dbWithout = new Database(List.of(new Pattern("hello")), BLOCK_MODE);
                 BlockScanner without = new BlockScanner(dbWithout)) {
             without.scan("say hello!", (_, from, to) -> {
                 assertEquals(0, from); // without SOM_LEFTMOST, "from" is always 0
@@ -289,7 +288,7 @@ public class PatternFlagsTests {
 
         // By adding the SOM_LEFTMOST flag to a pattern, vectorscan matches will also report the starting offset for
         // that pattern.
-        try (Database dbWith = new Database(List.of(new Expression("hello", EnumSet.of(SOM_LEFTMOST))), BLOCK_MODE);
+        try (Database dbWith = new Database(List.of(new Pattern("hello", EnumSet.of(SOM_LEFTMOST))), BLOCK_MODE);
                 BlockScanner with = new BlockScanner(dbWith)) {
             with.scan("say hello!", (_, from, to) -> {
                 assertEquals(4, from); // with SOM_LEFTMOST, "from" is being set correctly
@@ -301,17 +300,17 @@ public class PatternFlagsTests {
 
     @Test
     void combination() {
-        // With COMBINATION: the third expression is a logical AND of the first two by ID.
-        List<Expression> withFlag = List.of(
-                new Expression("foo", EnumSet.of(QUIET)), // id=0 – suppressed by QUIET
-                new Expression("bar", EnumSet.of(QUIET)), // id=1 – suppressed by QUIET
-                new Expression("0&1", EnumSet.of(COMBINATION)) // id=2 – fires when BOTH 0 and 1 match
+        // With COMBINATION: the third pattern is a logical AND of the first two by ID.
+        List<Pattern> withFlag = List.of(
+                new Pattern("foo", EnumSet.of(QUIET)), // id=0 – suppressed by QUIET
+                new Pattern("bar", EnumSet.of(QUIET)), // id=1 – suppressed by QUIET
+                new Pattern("0&1", EnumSet.of(COMBINATION)) // id=2 – fires when BOTH 0 and 1 match
                 );
         // Without COMBINATION: "0&1" is treated as the literal string pattern "0&1".
-        List<Expression> withoutFlag = List.of(
-                new Expression("foo"), // id=0
-                new Expression("bar"), // id=1
-                new Expression("0&1") // id=2 – matches the literal text "0&1"
+        List<Pattern> withoutFlag = List.of(
+                new Pattern("foo"), // id=0
+                new Pattern("bar"), // id=1
+                new Pattern("0&1") // id=2 – matches the literal text "0&1"
                 );
 
         try (Database dbWith = new Database(withFlag, BLOCK_MODE);
@@ -319,7 +318,7 @@ public class PatternFlagsTests {
                 Database dbWithout = new Database(withoutFlag, BLOCK_MODE);
                 BlockScanner without = new BlockScanner(dbWithout)) {
 
-            // COMBINATION: "foo bar" satisfies "0&1" → only the combination expression fires
+            // COMBINATION: "foo bar" satisfies "0&1" → only the combination pattern fires
             List<Integer> ids = matchIds(with, "foo bar");
             assertEquals(List.of(2), ids);
 
@@ -344,13 +343,13 @@ public class PatternFlagsTests {
         // So "0 & !1" can match "foo then bar" (true on an early prefix) even though the full input later
         // contains pattern 1 and would make "0 & !1" false at end-of-input.
         // id=2 should match when id=0 has matched and id=1 has not matched yet.
-        List<Expression> expressions = List.of(
-                new Expression("foo", EnumSet.of(QUIET)), // id=0
-                new Expression("bar", EnumSet.of(QUIET)), // id=1
-                new Expression("0 & !1", EnumSet.of(COMBINATION)) // id=2
+        List<Pattern> patterns = List.of(
+                new Pattern("foo", EnumSet.of(QUIET)), // id=0
+                new Pattern("bar", EnumSet.of(QUIET)), // id=1
+                new Pattern("0 & !1", EnumSet.of(COMBINATION)) // id=2
                 );
 
-        try (Database db = new Database(expressions, BLOCK_MODE);
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             // id=0 matches before id=1, so 0&!1 can become true before "bar" appears.
             assertEquals(List.of(2), matchIds(scanner, "foo then bar"));
@@ -362,13 +361,13 @@ public class PatternFlagsTests {
 
     @Test
     void quiet() {
-        try (Database dbWithout = new Database(List.of(new Expression("foo")), BLOCK_MODE);
+        try (Database dbWithout = new Database(List.of(new Pattern("foo")), BLOCK_MODE);
                 BlockScanner without = new BlockScanner(dbWithout)) {
             // without QUIET: a normal match callback is generated
             assertEquals(List.of(0), matchIds(without, "foo"));
         }
 
-        try (Database dbWith = new Database(List.of(new Expression("foo", EnumSet.of(QUIET))), BLOCK_MODE);
+        try (Database dbWith = new Database(List.of(new Pattern("foo", EnumSet.of(QUIET))), BLOCK_MODE);
                 BlockScanner with = new BlockScanner(dbWith)) {
             // QUIET: the pattern matches internally but no match callback is ever generated
             assertTrue(matchIds(with, "foo").isEmpty());

@@ -92,10 +92,10 @@ we want to count how often each pattern exists inside the input:
 ``` java 
     @Test
     void countLiteralPatternOccurrences() {
-        List<Expression> exprs = List.of(
-                new Expression("foo"),
-                new Expression("bar", EnumSet.of(Flags.CASELESS)),
-                new Expression("qux")
+        List<Pattern> exprs = List.of(
+                new Pattern("foo"),
+                new Pattern("bar", EnumSet.of(Flags.CASELESS)),
+                new Pattern("qux")
         );
 
         String input = "foo bar foo baz Bar foo";
@@ -117,13 +117,13 @@ we want to count how often each pattern exists inside the input:
         // qux -> matched 0 times.
     }
 ```
-The list of Expressions specify the set of patterns we want to match. Every one of them is assigned an id
+The list of Patterns specify the set of patterns we want to match. Every one of them is assigned an id
 starting from 0, according to their position inside the List. A Database object gets instantiated by passing to it 
-those Expressions, and specifying an execution mode. A Scanner object then references the Database 
+those Patterns, and specifying an execution mode. A Scanner object then references the Database 
 (BlockScanner objects for Databases with Block execution mode, and StreamScanner objects for Databases with Stream execution mode).  
 For the scan method, you pass it an input plus an object implementing the MatchHandler interface. It receives 3 arguments:
 
-1. The id of the expression that matched.
+1. The id of the pattern that matched.
 2. The byte position of where the match started. Note that by default, Vectorscan does not keep track of this value, unless the pattern flag SOM_LEFTMOST is enabled.
 3. The byte position of where the match ended.
 
@@ -149,12 +149,12 @@ vectorscan4j provides utility methods for serializing and deserializing a Databa
 ``` java
     @Test
     void serializeDeserializeDb() {
-        List<Expression> expressions = List.of(
-                new Expression("pat1"),
-                new Expression("pat2")
+        List<Pattern> patterns = List.of(
+                new Pattern("pat1"),
+                new Pattern("pat2")
         );
 
-        try (Database database = new Database(expressions, ExecutionMode.BLOCK)) {
+        try (Database database = new Database(patterns, ExecutionMode.BLOCK)) {
             byte[] dbBytes = database.serialize();
             // ... save dbBytes to file, or send over network ...
 
@@ -180,7 +180,7 @@ the future).
     // This function allocates off-heap memory and does not release it immediately
     void createDb() {
         // We create a new database, and don't call close() on it.
-        Database db = new Database(List.of(new Expression("a")), BLOCK_MODE);
+        Database db = new Database(List.of(new Pattern("a")), BLOCK_MODE);
 
         // After this function returns, db goes out of scope, and will at some point be garbage collected.
         // -> Its native memory gets freed, but not immediately.
@@ -191,7 +191,7 @@ For more optimal memory usage, either manually close Database and/or Scanner obj
 ``` java
     // This function is safe to call
     void createDbSafe() {
-        try (Database db = new Database(List.of(new Expression("a")), BLOCK_MODE)) {
+        try (Database db = new Database(List.of(new Pattern("a")), BLOCK_MODE)) {
             // Even if an exception gets thrown in here, JVM still closes db at the end of the try-block. 
             throw new RuntimeException("Something bad happened");
         }
@@ -203,7 +203,7 @@ For more optimal memory usage, either manually close Database and/or Scanner obj
 When using the overloaded Scanner.scan(MemorySegment segment, ...) method, 
 passing it a MemorySegment that points to a non-allocated region of memory leads to undefined behavior, including the possibility of segmentation faults.
 ``` java
-    try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
+    try (Database db = new Database(List.of(new Pattern("p1")), BLOCK_MODE);
          BlockScanner scanner = new BlockScanner(db);
          Arena arena = Arena.ofConfined()) {
         MatchHandler doNothing = (id, from, to) -> true;
@@ -224,7 +224,7 @@ Throwing exceptions inside the MatchHandler will always break the JVM, i.e. you 
 that exception outside the scan call:
 
 ``` java
-try (Database db = new Database(List.of(new Expression("p1")), BLOCK_MODE);
+try (Database db = new Database(List.of(new Pattern("p1")), BLOCK_MODE);
      BlockScanner scanner = new BlockScanner(db)) {
     MatchHandler throwException = (id, from, to) -> {
         throw new RuntimeException("Hi, try and catch me!");

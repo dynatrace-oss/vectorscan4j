@@ -167,7 +167,7 @@ $ nm -D --defined-only libmyhandler.so | grep ' T '
 ```java
 Path lib = Path.of("/path/to/libmyhandler.so");
 
-try (Database db = new Database(List.of(new Expression("the")), BLOCK_MODE);
+try (Database db = new Database(List.of(new Pattern("the")), BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);
         NativeMatchHandler handler = new NativeMatchHandler(lib)) {
 

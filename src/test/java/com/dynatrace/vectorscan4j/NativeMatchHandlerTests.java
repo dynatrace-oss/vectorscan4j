@@ -102,8 +102,8 @@ public class NativeMatchHandlerTests {
 
     @Test
     void scanRejectsNullHandler() {
-        List<Expression> exprs = List.of(new Expression("foo"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("foo"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db);
                 Arena arena = Arena.ofConfined()) {
             MemorySegment data = arena.allocateFrom("foo");
@@ -115,7 +115,7 @@ public class NativeMatchHandlerTests {
 
     @Test
     void allOverloadsRejectNullNativeHandler() {
-        try (Database db = new Database(List.of(new Expression("foo")), BLOCK_MODE);
+        try (Database db = new Database(List.of(new Pattern("foo")), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db);
                 Arena arena = Arena.ofConfined()) {
             byte[] foo = "foo".getBytes(StandardCharsets.UTF_8);
@@ -137,8 +137,8 @@ public class NativeMatchHandlerTests {
         Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_count_match.so");
         NativeMatchHandler handler = new NativeMatchHandler(tempPath);
         assertEquals(0, handler.context().get(ValueLayout.JAVA_INT, 0));
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("pattern1"));
+        Database db = new Database(patterns, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);
         scanner.scan("pattern1 pattern1 pattern1", handler);
         assertEquals(3, handler.context().get(ValueLayout.JAVA_INT, 0));
@@ -152,8 +152,8 @@ public class NativeMatchHandlerTests {
     void contextThrowsAfterClose() {
         Path tempPath = Path.of(System.getProperty("user.dir"), "src/test/resources/native/native_count_match.so");
         NativeMatchHandler handler = new NativeMatchHandler(tempPath);
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("pattern1"));
+        Database db = new Database(patterns, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);
         scanner.scan("Here is pattern1. You should get 1 match.", handler);
 
@@ -168,10 +168,10 @@ public class NativeMatchHandlerTests {
 
     @Test
     void nativeBatchHandler() {
-        List<Expression> exprs = List.of(new Expression("pattern1", EnumSet.of(PatternFlag.SOM_LEFTMOST)));
+        List<Pattern> patterns = List.of(new Pattern("pattern1", EnumSet.of(PatternFlag.SOM_LEFTMOST)));
         String input = "pattern1 pattern1 pattern1 pattern1 pattern1";
 
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             // baseline: the same scan through a plain per-match Java callback
             List<List<Long>> expected = new ArrayList<>();
@@ -198,7 +198,7 @@ public class NativeMatchHandlerTests {
 
     @Test
     void nativeBatchHandlerStopsEarly() {
-        try (Database db = new Database(List.of(new Expression("pattern1")), BLOCK_MODE);
+        try (Database db = new Database(List.of(new Pattern("pattern1")), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             List<Integer> batchSizes = new ArrayList<>();
             try (BufferedMatchHandler handler = new BufferedMatchHandler(2, (buf, n) -> {
@@ -214,7 +214,7 @@ public class NativeMatchHandlerTests {
 
     @Test
     void nativeBatchHandlerIsReusableAcrossScans() {
-        try (Database db = new Database(List.of(new Expression("pattern1")), BLOCK_MODE);
+        try (Database db = new Database(List.of(new Pattern("pattern1")), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             List<Integer> batchSizes = new ArrayList<>();
             try (BufferedMatchHandler handler = new BufferedMatchHandler(2, (buf, n) -> {
@@ -231,7 +231,7 @@ public class NativeMatchHandlerTests {
 
     @Test
     void nativeBatchHandlerFlushesRemainderOnStreamScanner() {
-        try (Database db = new Database(List.of(new Expression("pattern1")), STREAM_MODE);
+        try (Database db = new Database(List.of(new Pattern("pattern1")), STREAM_MODE);
                 StreamScanner scanner = new StreamScanner(db)) {
             List<Integer> batchSizes = new ArrayList<>();
             try (BufferedMatchHandler handler = new BufferedMatchHandler(2, (buf, n) -> {

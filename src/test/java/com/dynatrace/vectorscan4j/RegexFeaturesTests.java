@@ -30,18 +30,18 @@ public class RegexFeaturesTests {
         return true;
     };
 
-    static List<Expression> getExpressions(List<String> patterns) {
-        List<Expression> expressions = new ArrayList<>();
+    static List<Pattern> getPatterns(List<String> patterns) {
+        List<Pattern> compiledPatterns = new ArrayList<>();
         for (var pattern : patterns) {
-            expressions.add(new Expression(pattern));
+            compiledPatterns.add(new Pattern(pattern));
         }
-        return expressions;
+        return compiledPatterns;
     }
 
     static int numMatches(String s, List<String> patterns) {
-        var expressions = getExpressions(patterns);
+        var compiledPatterns = getPatterns(patterns);
         nMatches = 0;
-        try (Database db = new Database(expressions, BLOCK_MODE);
+        try (Database db = new Database(compiledPatterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             scanner.scan(s, countMatch);
         }

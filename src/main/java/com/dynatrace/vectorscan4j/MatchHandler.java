@@ -29,9 +29,9 @@ public non-sealed interface MatchHandler extends ScanHandler {
     /**
      * Called for every match found during a scan.
      *
-     * @param id id of the matched expression (pattern)
+     * @param id id of the matched pattern
      * @param from start byte offset of the match in the scanned input; this is only populated when
-     *     the expression uses {@link PatternFlag#SOM_LEFTMOST}, otherwise it is typically {@code 0}
+     *     the pattern uses {@link PatternFlag#SOM_LEFTMOST}, otherwise it is typically {@code 0}
      * @param to end byte offset of the match in the scanned input
      * @return {@code true} to continue scanning, {@code false} to stop scanning early
      */

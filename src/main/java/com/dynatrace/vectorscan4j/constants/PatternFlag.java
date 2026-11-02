@@ -16,7 +16,7 @@
 package com.dynatrace.vectorscan4j.constants;
 
 /**
- * Pattern flags for literal/regex expressions.
+ * Pattern flags for literal/regex patterns.
  */
 public enum PatternFlag {
     /* The comments below were adapted from the official Hyperscan documentation https://intel.github.io/hyperscan/dev-reference/api_constants.html */
@@ -24,7 +24,7 @@ public enum PatternFlag {
     /**
      * Compile flag: Set case-insensitive matching.
      *
-     * <p>This flag sets the expression to be matched case-insensitively by default. The expression
+     * <p>This flag sets the pattern to be matched case-insensitively by default. The pattern
      * may still use PCRE tokens (notably `(?i)` and `(?-i)`) to switch case-insensitive matching on
      * and off.
      */
@@ -42,7 +42,7 @@ public enum PatternFlag {
     /**
      * Compile flag: Set multi-line anchoring.
      *
-     * <p>This flag instructs the expression to make the `^` and `$` tokens match newline characters
+     * <p>This flag instructs the pattern to make the `^` and `$` tokens match newline characters
      * as well as the start and end of the stream. If this flag is not specified, the `^` token will
      * only ever match at the start of a stream, and the `$` token will only ever match at the end of
      * a stream within the guidelines of the PCRE specification.
@@ -52,8 +52,8 @@ public enum PatternFlag {
     /**
      * Compile flag: Set single-match only mode.
      *
-     * <p>This flag sets the expression's match ID to match at most once. In streaming mode, this
-     * means that the expression will return only a single match over the lifetime of the stream,
+     * <p>This flag sets the pattern's match ID to match at most once. In streaming mode, this
+     * means that the pattern will return only a single match over the lifetime of the stream,
      * rather than reporting every match as per standard Vectorscan semantics.
      *
      * <p>Note: The use of this flag in combination with {@link #SOM_LEFTMOST} is not currently
@@ -62,18 +62,18 @@ public enum PatternFlag {
     SINGLEMATCH(8),
 
     /**
-     * Compile flag: Allow expressions that can match against empty buffers.
+     * Compile flag: Allow patterns that can match against empty buffers.
      *
-     * <p>This flag instructs the compiler to allow expressions that can match against empty buffers,
-     * such as `.?`, `.*`, `(a|)`. Since Vectorscan can return every possible match for an expression,
-     * such expressions generally execute very slowly; the default behaviour is to return an error
+     * <p>This flag instructs the compiler to allow patterns that can match against empty buffers,
+     * such as `.?`, `.*`, `(a|)`. Since Vectorscan can return every possible match for a pattern,
+     * such patterns generally execute very slowly; the default behaviour is to return an error
      * when an attempt to compile one is made. Using this flag will force the compiler to allow such
-     * an expression.
+     * a pattern.
      */
     ALLOWEMPTY(16),
 
     /**
-     * Compile flag: Enable UTF-8 mode for this expression.
+     * Compile flag: Enable UTF-8 mode for this pattern.
      *
      * <p>This flag instructs Vectorscan to treat the pattern as a sequence of UTF-8 characters. The
      * results of scanning invalid UTF-8 sequences with a Vectorscan library that has been compiled
@@ -82,7 +82,7 @@ public enum PatternFlag {
     UTF8(32),
 
     /**
-     * Compile flag: Enable Unicode property support for this expression.
+     * Compile flag: Enable Unicode property support for this pattern.
      *
      * <p>This flag instructs Vectorscan to use Unicode properties, rather than the default ASCII
      * interpretations, for character mnemonics like `\w` and `\s` as well as the POSIX character
@@ -91,13 +91,13 @@ public enum PatternFlag {
     UCP(64),
 
     /**
-     * Compile flag: Enable prefiltering mode for this expression.
+     * Compile flag: Enable prefiltering mode for this pattern.
      *
      * <p>This flag instructs Hyperscan to compile an "approximate" version of this pattern for use in
      * a prefiltering application, even if Hyperscan does not support the pattern in normal operation.
      *
      * <p>The set of matches returned when this flag is used is guaranteed to be a superset of the
-     * matches specified by the non-prefiltering expression.
+     * matches specified by the non-prefiltering pattern.
      *
      * <p>If the pattern contains pattern constructs not supported by Hyperscan (such as zero-width
      * assertions, back-references or conditional references) these constructs will be replaced
@@ -119,7 +119,7 @@ public enum PatternFlag {
      * Compile flag: Enable leftmost start of match reporting.
      *
      * <p>This flag instructs Hyperscan to report the leftmost possible start of match offset when a
-     * match is reported for this expression. (By default, no start of match is returned.)
+     * match is reported for this pattern. (By default, no start of match is returned.)
      *
      * <p>For all the 3 modes, enabling this behaviour may reduce performance. And particularly, it
      * may increase stream state requirements in streaming mode.
@@ -129,10 +129,10 @@ public enum PatternFlag {
     /**
      * Compile flag: Logical combination.
      *
-     * <p>This flag instructs Hyperscan to parse this expression as logical combination syntax.
+     * <p>This flag instructs Hyperscan to parse this pattern as logical combination syntax.
      *
      * <p>Logical constraints consist of operands, operators and parentheses. The operands are
-     * expression indices, and operators can be {@code "!"} (NOT), {@code "&amp;"} (AND) or
+     * pattern indices, and operators can be {@code "!"} (NOT), {@code "&amp;"} (AND) or
      * {@code "|"} (OR).
      *
      * <p>For example: {@code (101&amp;102&amp;103)|(104&amp;!105)}
@@ -143,8 +143,8 @@ public enum PatternFlag {
     /**
      * Compile flag: Don't do any match reporting.
      *
-     * <p>This flag instructs Hyperscan to ignore match reporting for this expression. It is designed
-     * to be used on the sub-expressions in logical combinations.
+     * <p>This flag instructs Hyperscan to ignore match reporting for this pattern. It is designed
+     * to be used on the sub-patterns in logical combinations.
      */
     QUIET(1024);
 

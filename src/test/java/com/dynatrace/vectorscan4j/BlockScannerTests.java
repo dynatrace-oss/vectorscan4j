@@ -34,24 +34,24 @@ import java.util.concurrent.*;
 import org.junit.jupiter.api.Test;
 
 public class BlockScannerTests {
-    static final List<Expression> expressions = Arrays.asList(
-            new Expression("pattern1", EnumSet.of(SOM_LEFTMOST, CASELESS)),
-            new Expression("pattern2", EnumSet.of(SOM_LEFTMOST, CASELESS)),
-            new Expression("pattern3", EnumSet.of(SOM_LEFTMOST, CASELESS)));
+    static final List<Pattern> PATTERNS = Arrays.asList(
+            new Pattern("pattern1", EnumSet.of(SOM_LEFTMOST, CASELESS)),
+            new Pattern("pattern2", EnumSet.of(SOM_LEFTMOST, CASELESS)),
+            new Pattern("pattern3", EnumSet.of(SOM_LEFTMOST, CASELESS)));
     static int nMatches = 0;
 
     final MatchHandler doNothing = (_, _, _) -> true;
 
     @Test
     void databaseWrongMode() {
-        Database db = new Database(expressions, ExecutionMode.STREAM_MODE);
+        Database db = new Database(PATTERNS, ExecutionMode.STREAM_MODE);
         assertThrows(IllegalArgumentException.class, () -> new BlockScanner(db));
         db.close();
     }
 
     @Test
     void defaultScan() {
-        try (Database db = new Database(expressions, BLOCK_MODE);
+        try (Database db = new Database(PATTERNS, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             String input = "I am searching for pattern1, has anyone seen pattern1?";
             List<Integer> matchedIds = new ArrayList<>();
@@ -71,8 +71,8 @@ public class BlockScannerTests {
             nMatches += 1;
             return false;
         };
-        List<Expression> exprs = List.of(new Expression("pat1"), new Expression("pat2"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("pat1"), new Pattern("pat2"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             nMatches = 0;
             scanner.scan("Here is pat1 and here is pat2!", incrementAndStop);
@@ -86,7 +86,7 @@ public class BlockScannerTests {
 
     @Test
     void invalidLength() {
-        try (Database db = new Database(expressions, BLOCK_MODE);
+        try (Database db = new Database(PATTERNS, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             byte[] data = "Hello".getBytes();
             assertDoesNotThrow(() -> scanner.scan(data, 0, 5, doNothing));
@@ -99,7 +99,7 @@ public class BlockScannerTests {
 
     @Test
     void noMatch() {
-        try (Database db = new Database(expressions, BLOCK_MODE);
+        try (Database db = new Database(PATTERNS, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             List<Integer> matchedIds = new ArrayList<>();
             scanner.scan("this input contains nothing of interest", (id, _, _) -> {
@@ -112,7 +112,7 @@ public class BlockScannerTests {
 
     @Test
     void emptyInput() {
-        try (Database db = new Database(expressions, BLOCK_MODE);
+        try (Database db = new Database(PATTERNS, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             List<Integer> matchedIds = new ArrayList<>();
             MatchHandler collect = (id, _, _) -> {
@@ -129,8 +129,8 @@ public class BlockScannerTests {
 
     @Test
     void directByteBuffer() {
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("pattern1"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             byte[] bytes = "found pattern1 here".getBytes(StandardCharsets.UTF_8);
             ByteBuffer direct = ByteBuffer.allocateDirect(bytes.length);
@@ -148,8 +148,8 @@ public class BlockScannerTests {
 
     @Test
     void directByteBufferRangeRespected() {
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("pattern1"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             String in = "pattern1__pattern1__pattern1";
             byte[] arr = in.getBytes(StandardCharsets.UTF_8);
@@ -177,8 +177,8 @@ public class BlockScannerTests {
 
     @Test
     void heapByteBuffer() {
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("pattern1"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             byte[] bytes = "found pattern1 here".getBytes(StandardCharsets.UTF_8);
             ByteBuffer direct = ByteBuffer.allocate(bytes.length);
@@ -196,8 +196,8 @@ public class BlockScannerTests {
 
     @Test
     void heapByteBufferRangeRespected() {
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("pattern1"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             ByteBuffer buf = ByteBuffer.wrap("pattern1__pattern1__pattern1".getBytes(StandardCharsets.UTF_8));
             List<Integer> matchedIds = new ArrayList<>();
@@ -219,10 +219,35 @@ public class BlockScannerTests {
         }
     }
 
+    int count = 0;
+
+    @Test
+    void heapAndDirectByteBuffersBehaveTheSame() {
+        List<Pattern> patterns = List.of(new Pattern("pattern1"));
+        byte[] bytes = "pattern1 pattern1 pattern1".getBytes(StandardCharsets.UTF_8);
+        MatchHandler handler = (_, _, _) -> {
+            count++;
+            return true;
+        };
+        try (Database db = new Database(patterns, BLOCK_MODE);
+                BlockScanner scanner = new BlockScanner(db)) {
+            ByteBuffer heap = ByteBuffer.wrap(bytes);
+            ByteBuffer direct =
+                    ByteBuffer.allocateDirect(bytes.length).put(bytes).flip();
+            scanner.scan(heap, handler);
+            scanner.scan(heap, handler);
+            int heapCount = count;
+            count = 0;
+            scanner.scan(direct, handler);
+            scanner.scan(direct, handler);
+            assertEquals(heapCount, count);
+        }
+    }
+
     @Test
     void byteArray() {
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("pattern1"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             byte[] data = "found pattern1 twice: pattern1".getBytes(StandardCharsets.UTF_8);
 
@@ -237,8 +262,8 @@ public class BlockScannerTests {
 
     @Test
     void byteArrayRangeRespected() {
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("pattern1"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             byte[] data = "found pattern1 twice: pattern1".getBytes(StandardCharsets.UTF_8);
 
@@ -253,8 +278,8 @@ public class BlockScannerTests {
 
     @Test
     void bufferResizing() {
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("pattern1"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             // large input triggers internal buffer reallocation
             byte[] bigData = ("pattern1" + "x".repeat(1024 * 1024 * 10)).getBytes(StandardCharsets.UTF_8);
@@ -277,8 +302,8 @@ public class BlockScannerTests {
 
     @Test
     void multiplePatternsSameInput() {
-        List<Expression> exprs = List.of(new Expression("foo"), new Expression("bar"), new Expression("baz"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("foo"), new Pattern("bar"), new Pattern("baz"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             List<Integer> matchedIds = new ArrayList<>();
             scanner.scan("foo bar baz", (id, _, _) -> {
@@ -293,13 +318,13 @@ public class BlockScannerTests {
 
     @Test
     void countLiteralPatternOccurrences() {
-        List<Expression> exprs = List.of(
-                new Expression("foo"), new Expression("bar", EnumSet.of(PatternFlag.CASELESS)), new Expression("qux"));
+        List<Pattern> patterns =
+                List.of(new Pattern("foo"), new Pattern("bar", EnumSet.of(PatternFlag.CASELESS)), new Pattern("qux"));
 
         String input = "foo bar foo baz Bar foo";
-        int[] countsById = new int[exprs.size()];
+        int[] countsById = new int[patterns.size()];
 
-        Database database = new Database(exprs, BLOCK_MODE);
+        Database database = new Database(patterns, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(database);
         scanner.scan(input, (id, _, _) -> {
             countsById[id]++;
@@ -316,13 +341,13 @@ public class BlockScannerTests {
         char[] randomData = LoadGenerator.randomCharArr(1024 * 1024 * 10);
         byte[] fileBytes = new String(randomData).getBytes(StandardCharsets.UTF_8);
 
-        List<Expression> exprs = List.of(new Expression("a"), new Expression("b"));
+        List<Pattern> patterns = List.of(new Pattern("a"), new Pattern("b"));
 
         // Reference: scan each section sequentially to get the expected match count
         int nCores = 4;
         int sectionSize = fileBytes.length / nCores;
         int expectedMatches = 0;
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             for (int i = 0; i < nCores; i++) {
                 final int start = i * sectionSize;
@@ -337,7 +362,7 @@ public class BlockScannerTests {
         }
 
         // Parallel: one BlockScanner per thread, sharing a single compiled Database
-        Database db = new Database(exprs, BLOCK_MODE);
+        Database db = new Database(patterns, BLOCK_MODE);
         List<Integer> parallelMatches = Collections.synchronizedList(new ArrayList<>());
         ExecutorService pool = Executors.newFixedThreadPool(nCores);
         List<Future<?>> futures = new ArrayList<>();
@@ -362,7 +387,7 @@ public class BlockScannerTests {
 
     @Test
     void scanAfterClosingDatabaseThrows() {
-        Database db = new Database(expressions, BLOCK_MODE);
+        Database db = new Database(PATTERNS, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);
         db.close();
         assertThrows(IllegalStateException.class, () -> scanner.scan("Test", doNothing));
@@ -370,7 +395,7 @@ public class BlockScannerTests {
 
     @Test
     void scanAfterClosingScannerThrows() {
-        try (Database db = new Database(expressions, BLOCK_MODE)) {
+        try (Database db = new Database(PATTERNS, BLOCK_MODE)) {
             BlockScanner scanner = new BlockScanner(db);
             scanner.close();
             // The underlying Arena is closed; any subsequent scan must throw
@@ -380,7 +405,7 @@ public class BlockScannerTests {
 
     @Test
     void closeBlockScannerIsIdempotent() {
-        try (Database db = new Database(expressions, BLOCK_MODE)) {
+        try (Database db = new Database(PATTERNS, BLOCK_MODE)) {
             BlockScanner scanner = new BlockScanner(db);
             assertDoesNotThrow(scanner::close);
             assertDoesNotThrow(scanner::close);
@@ -389,7 +414,7 @@ public class BlockScannerTests {
 
     @Test
     void scanClosedMemorySegmentThrows() {
-        try (Database db = new Database(expressions, BLOCK_MODE)) {
+        try (Database db = new Database(PATTERNS, BLOCK_MODE)) {
             BlockScanner scanner = new BlockScanner(db);
             Arena arena = Arena.ofConfined();
             MemorySegment data = arena.allocateFrom("Input String");
@@ -400,7 +425,7 @@ public class BlockScannerTests {
 
     @Test
     void createScannerFromInvalidDbThrows() {
-        try (Database db = new Database(expressions, BLOCK_MODE)) {
+        try (Database db = new Database(PATTERNS, BLOCK_MODE)) {
             // flip the first byte in the native database, to make the encoded DB invalid
             byte b0 = db.dbNative.get(JAVA_BYTE, 0);
             db.dbNative.set(JAVA_BYTE, 0, (byte) (b0 ^ 0xFF));
@@ -417,7 +442,7 @@ public class BlockScannerTests {
 
     @Test
     void scannerOperationsWithInvalidDb() {
-        try (Database db = new Database(expressions, BLOCK_MODE);
+        try (Database db = new Database(PATTERNS, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             // flip the first byte in the native database, to make the encoded DB invalid
             byte b0 = db.dbNative.get(JAVA_BYTE, 0);
@@ -432,7 +457,7 @@ public class BlockScannerTests {
 
     @Test
     void notClosingStillFreesMemory() throws InterruptedException {
-        Database db = new Database(expressions, BLOCK_MODE);
+        Database db = new Database(PATTERNS, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);
         WeakReference<Database> dbRef = new WeakReference<>(db);
         WeakReference<BlockScanner> scannerRef = new WeakReference<>(scanner);
@@ -456,7 +481,7 @@ public class BlockScannerTests {
 
     @Test
     void scannerKeepsDatabaseAlive() throws InterruptedException {
-        Database db = new Database(expressions, BLOCK_MODE);
+        Database db = new Database(PATTERNS, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);
         WeakReference<Database> dbRef = new WeakReference<>(db);
         WeakReference<BlockScanner> scannerRef = new WeakReference<>(scanner);
@@ -500,7 +525,7 @@ public class BlockScannerTests {
 
     @Test
     void usingScannerFromMultipleThreadsThrows() throws Exception {
-        Database db = new Database(expressions, BLOCK_MODE);
+        Database db = new Database(PATTERNS, BLOCK_MODE);
         BlockScanner scanner = new BlockScanner(db);
 
         ExecutorService service = Executors.newFixedThreadPool(1);
@@ -528,8 +553,8 @@ public class BlockScannerTests {
 
     @Test
     void twoScannersWithSameDatabaseCanScanConcurrently() throws Exception {
-        List<Expression> exprs = List.of(new Expression("pattern1"));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("pattern1"));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner1 = new BlockScanner(db);
                 BlockScanner scanner2 = new BlockScanner(db)) {
             ExecutorService pool = Executors.newFixedThreadPool(2);
@@ -605,7 +630,7 @@ public class BlockScannerTests {
 
     @Test
     void batchedMatchHandling() {
-        try (Database db = new Database(expressions, BLOCK_MODE);
+        try (Database db = new Database(PATTERNS, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             String input = "We match pattern1, pattern2 and pattern3 one time each.";
             assertTrue(sameMatches(scanner, input, 4));
@@ -616,8 +641,8 @@ public class BlockScannerTests {
     void multipleStartPositions() {
         // "foo.*bar" on "foofooxyzbar": two possible starts (0 and 3) both end at offset 12,
         // but SOM_LEFTMOST reports only the leftmost start — so just one match at (0, 12).
-        List<Expression> exprs = List.of(new Expression("foo.*bar", EnumSet.of(SOM_LEFTMOST)));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("foo.*bar", EnumSet.of(SOM_LEFTMOST)));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             record Match(long from, long to) {}
             List<Match> matches = new ArrayList<>();
@@ -633,8 +658,8 @@ public class BlockScannerTests {
     void multipleEndPositions() {
         // "foo.*bar" matches at two end positions in "fooxyzbarbar":
         // once ending at the first "bar" (to=9) and once ending at the second (to=12).
-        List<Expression> exprs = List.of(new Expression("foo.*bar", EnumSet.of(SOM_LEFTMOST)));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("foo.*bar", EnumSet.of(SOM_LEFTMOST)));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             record Match(long from, long to) {}
             List<Match> matches = new ArrayList<>();
@@ -652,8 +677,8 @@ public class BlockScannerTests {
         // SOM_LEFTMOST reports the leftmost start per end position:
         // - to=12 ("foofooxyzbar"): leftmost start is 0, not 3
         // - to=15 ("foofooxyzbarbar"): leftmost start is 0, not 3
-        List<Expression> exprs = List.of(new Expression("foo.*bar", EnumSet.of(SOM_LEFTMOST)));
-        try (Database db = new Database(exprs, BLOCK_MODE);
+        List<Pattern> patterns = List.of(new Pattern("foo.*bar", EnumSet.of(SOM_LEFTMOST)));
+        try (Database db = new Database(patterns, BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             record Match(long from, long to) {}
             List<Match> matches = new ArrayList<>();
@@ -667,7 +692,7 @@ public class BlockScannerTests {
 
     @Test
     void scanReportsWhetherItCompleted() {
-        try (Database db = new Database(List.of(new Expression("pattern1")), BLOCK_MODE);
+        try (Database db = new Database(List.of(new Pattern("pattern1")), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             assertTrue(scanner.scan("pattern1 pattern1", doNothing), "a handler that never stops lets the scan finish");
             assertFalse(scanner.scan("pattern1 pattern1", (_, _, _) -> false), "returning false stops it early");
@@ -677,7 +702,7 @@ public class BlockScannerTests {
 
     @Test
     void batchedScanReportsWhetherItCompleted() {
-        try (Database db = new Database(List.of(new Expression("pattern1")), BLOCK_MODE);
+        try (Database db = new Database(List.of(new Pattern("pattern1")), BLOCK_MODE);
                 BlockScanner scanner = new BlockScanner(db)) {
             String threeMatches = "pattern1 pattern1 pattern1";
             assertTrue(scanner.scan(threeMatches, new BufferedMatchHandler(2, (buf, n) -> true)));
