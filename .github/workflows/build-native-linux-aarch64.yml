@@ -6,7 +6,7 @@ on:
       cmake_args:
         description: 'Arguments for "cmake -B build" when configuring Vectorscan'
         required: false
-        default: '-DBUILD_SHARED_LIBS=On -DCMAKE_BUILD_TYPE=Release -DFAT_RUNTIME=On -DBUILD_BENCHMARKS=Off -DBUILD_UNIT=Off -DBUILD_TOOLS=Off -DBUILD_EXAMPLES=Off -DBUILD_DOC=Off'
+        default: '-DBUILD_SHARED_LIBS=On -DCMAKE_BUILD_TYPE=Release -DFAT_RUNTIME=Off -DBUILD_BENCHMARKS=Off -DBUILD_UNIT=Off -DBUILD_TOOLS=Off -DBUILD_EXAMPLES=Off -DBUILD_DOC=Off'
       output_name:
         description: 'File name for the Vectorscan library under src/main/resources/native/linux/aarch64/'
         required: false
