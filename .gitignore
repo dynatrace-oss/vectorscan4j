@@ -1,4 +1,3 @@
-src/jmh/resources/
 src/test/resources/*
 !src/test/resources/native/
 src/test/resources/native/*.so
@@ -36,3 +35,5 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+### Bundled native libraries: built by CI, not committed (see build.gradle: downloadNatives) ###
+src/main/resources/native/*/

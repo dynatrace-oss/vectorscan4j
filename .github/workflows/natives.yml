@@ -1,0 +1,111 @@
+name: Build native libraries
+
+# Builds the bundled native libraries (Vectorscan and the buffered match handler) for every supported
+# platform, from the Vectorscan commit pinned in vectorscan.version, and runs the tests on each platform.
+# The result is one artifact, "natives", laid out like src/main/resources/native/ (<os>/<arch>/<lib>).
+# Called by the CI and release workflows; can also be started manually.
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: linux, arch: x86_64, runner: ubuntu-latest, libhs: libhs.so, generator: '' }
+          - { os: linux, arch: aarch64, runner: ubuntu-24.04-arm, libhs: libhs.so, generator: '' }
+          - { os: osx, arch: aarch64, runner: macos-latest, libhs: libhs.dylib, generator: '-GNinja' }
+
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      NATIVE_DIR: src/main/resources/native/${{ matrix.os }}/${{ matrix.arch }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read pinned Vectorscan commit
+        run: echo "VECTORSCAN_REF=$(tr -d '[:space:]' < vectorscan.version)" >> "$GITHUB_ENV"
+
+      # Vectorscan only needs rebuilding when the pin or this workflow (its build flags) changes.
+      - name: Restore cached Vectorscan library
+        id: cache
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.NATIVE_DIR }}/${{ matrix.libhs }}
+          key: libhs-${{ matrix.os }}-${{ matrix.arch }}-${{ hashFiles('vectorscan.version', '.github/workflows/natives.yml') }}
+
+      - name: Install Vectorscan build dependencies (Linux)
+        if: steps.cache.outputs.cache-hit != 'true' && matrix.os == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libboost-dev ragel pkg-config
+
+      - name: Install Vectorscan build dependencies (macOS)
+        if: steps.cache.outputs.cache-hit != 'true' && matrix.os == 'osx'
+        run: brew install boost ragel pkg-config
+
+      - name: Build Vectorscan
+        if: steps.cache.outputs.cache-hit != 'true'
+        timeout-minutes: 90
+        run: |
+          git init -q vectorscan
+          git -C vectorscan fetch -q --depth 1 https://github.com/VectorCamp/vectorscan.git "$VECTORSCAN_REF"
+          git -C vectorscan checkout -q FETCH_HEAD
+          git -C vectorscan submodule update --init --recursive --depth 1
+          git -C vectorscan log -1 --format='Building Vectorscan %H (%ci)'
+          c++ --version
+          cmake -S vectorscan -B vectorscan/build ${{ matrix.generator }} -DBUILD_SHARED_LIBS=On -DCMAKE_BUILD_TYPE=Release -DFAT_RUNTIME=Off -DBUILD_BENCHMARKS=Off -DBUILD_UNIT=Off -DBUILD_TOOLS=Off -DBUILD_EXAMPLES=Off -DBUILD_DOC=Off
+          cmake --build vectorscan/build --config Release --parallel "$(getconf _NPROCESSORS_ONLN)"
+          mkdir -p "$NATIVE_DIR"
+          cp "vectorscan/build/lib/${{ matrix.libhs }}" "$NATIVE_DIR/"
+
+      - uses: actions/setup-java@v6
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Build buffered match handler
+        run: ./gradlew buildBufferedMatchHandler
+
+      - name: Test
+        run: ./gradlew test
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: natives-${{ matrix.os }}-${{ matrix.arch }}
+          path: ${{ env.NATIVE_DIR }}/
+          if-no-files-found: error
+
+  collect:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: natives-*
+          path: per-platform
+
+      - name: Arrange as <os>/<arch>/
+        run: |
+          for dir in per-platform/natives-*; do
+            platform="${dir#per-platform/natives-}"
+            target="natives/${platform%%-*}/${platform#*-}"
+            mkdir -p "$target"
+            cp "$dir"/* "$target/"
+          done
+          find natives -type f | sort
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: natives
+          path: natives/
+          if-no-files-found: error

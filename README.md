@@ -14,6 +14,7 @@ It supports the simultaneous matching of thousands of different string- and/or r
 - [Database Serialization/Deserialization](#database-serializationdeserialization)
 - [Incorrect Usage Patterns](#incorrect-usage-patterns)
 - [Limitations](#limitations)
+- [Building and Releasing](#building-and-releasing)
 - [Third-Party Licenses](#third-party-licenses)
 - [Contributing](#contributing)
 
@@ -54,9 +55,7 @@ implementation "com.dynatrace.vectorscan4j:vectorscan4j:{latest-vectorscan4j-ver
 - **Java 25+** (uses the [Foreign Function & Memory API](https://docs.oracle.com/en/java/javase/25/core/foreign-function-and-memory-api.html))
 - **Linux** (x86-64 or aarch64), and Mac (aarch64) — native Vectorscan binaries are bundled inside the JAR
 
-The Linux binaries are built with Vectorscan's fat runtime. They pick the fastest instruction set the CPU supports when the
-library is first used, with no configuration needed: SSE4.2, AVX2, AVX512 and AVX512VBMI on x86-64, and NEON, SVE and SVE2 on
-aarch64. The macOS binary uses the default CPU target.
+The bundled binaries are built for Vectorscan's default CPU target (SSE4.2 on x86-64, NEON on aarch64).
 
 ## Usage
 
@@ -251,7 +250,7 @@ Using the same Scanner from multiple threads will throw a VectorscanException.
 ### 1. Limited Platform Support
 
 Native Vectorscan supports multiple operating systems and CPU architectures (see the [official repository](https://github.com/VectorCamp/vectorscan)).  
-At the moment, `vectorscan4j` bundles binaries for Linux (x86-64 and aarch64) and macOS (aarch64 only). There is no macOS x86-64 binary yet.
+At the moment, `vectorscan4j` bundles binaries for Linux (x86-64 and aarch64) and macOS (aarch64 only). Intel-based Macs are not supported.
 
 ### 2. Not all regex features are fully supported
  
@@ -268,13 +267,39 @@ scans may return false positives and should be followed by a secondary exact val
 
 Currently, there is no support for Vectorscan's Vector mode execution.
 
+## Building and Releasing
+
+The native libraries are not committed to git. The [natives workflow](.github/workflows/natives.yml) builds them on
+every supported platform from the Vectorscan commit pinned in [`vectorscan.version`](vectorscan.version), and runs the
+tests on each platform. CI runs it on every push and pull request; after the first run, Vectorscan is only rebuilt when
+the pin or the workflow changes.
+
+To build locally, fetch the native libraries of a release first (this needs the [GitHub CLI](https://cli.github.com/),
+logged in with `gh auth login`):
+
+```shell
+./gradlew downloadNatives                     # latest release
+./gradlew downloadNatives -PnativesTag=v0.6.0 # a specific (or draft) release
+./gradlew build
+```
+
+To release a new version:
+
+1. Set `version` in `build.gradle` (without `-SNAPSHOT`), commit, then tag and push: `git tag v0.6.0 && git push origin v0.6.0`.
+2. The [release workflow](.github/workflows/release.yml) builds and tests the native libraries, checks that the tag
+   matches the version, and attaches `vectorscan4j-natives.zip` to a draft GitHub release.
+3. Locally, run `./gradlew downloadNatives -PnativesTag=v0.6.0`, then `./gradlew createRepoForUploadToMavenCentral`, and
+   upload `build/mavencentral/repo.zip` to the Maven Central Portal. Publishing fails if any platform's library is
+   missing (`verifyNatives`).
+4. Publish the draft GitHub release.
+
 ## Third-Party Licenses
 
-This repository bundles prebuilt native binaries for Vectorscan under:
+The published JAR bundles prebuilt native binaries for Vectorscan under:
 
-- `src/main/resources/native/linux/x86_64/libhs.so`
-- `src/main/resources/native/linux/aarch64/libhs.so`
-- `src/main/resources/native/osx/aarch64/libhs.dylib`
+- `native/linux/x86_64/libhs.so`
+- `native/linux/aarch64/libhs.so`
+- `native/osx/aarch64/libhs.dylib`
 
 The corresponding third-party notice and license reproduction is provided in:
 

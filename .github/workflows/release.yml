@@ -1,0 +1,59 @@
+name: Release
+
+# Runs when a version tag (e.g. v0.6.0) is pushed. Builds and tests the native libraries on every platform,
+# builds the jar with all of them, and attaches them to a draft GitHub release as vectorscan4j-natives.zip.
+# Publishing to Maven Central stays manual (signing happens locally), see README "Releasing".
+
+on:
+  push:
+    tags: [ 'v*' ]
+
+jobs:
+  natives:
+    uses: ./.github/workflows/natives.yml
+    permissions:
+      contents: read
+
+  release:
+    needs: natives
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: natives
+          path: src/main/resources/native
+
+      - uses: actions/setup-java@v6
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Check that the tag matches the project version
+        run: |
+          version=$(./gradlew -q properties --property version | awk '/^version:/ {print $2}')
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::build.gradle has version $version, but the tag is $GITHUB_REF_NAME"
+            exit 1
+          fi
+
+      - name: Build jar with all native libraries
+        run: ./gradlew verifyNatives build -x test
+
+      - name: Package native libraries
+        working-directory: src/main/resources/native
+        run: zip -r "$GITHUB_WORKSPACE/vectorscan4j-natives.zip" linux osx
+
+      - name: Attach to draft GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" > /dev/null 2>&1 || gh release create "$TAG" --draft --verify-tag --title "$TAG" --generate-notes
+          gh release upload "$TAG" vectorscan4j-natives.zip --clobber

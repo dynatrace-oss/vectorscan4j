@@ -108,11 +108,57 @@ tasks.register('buildBufferedMatchHandler', Exec) {
             bufferedSrc.absolutePath, '-o', bufferedOut.absolutePath
 }
 
-// buildBufferedMatchHandler writes its .so into src/main/resources, which these tasks consume as input.
-// Order them when both are scheduled; deliberately not dependsOn, so a normal build does not
-// trigger a native rebuild.
+// The bundled native libraries are not in git. The natives workflow (.github/workflows/natives.yml) builds
+// them, and the release workflow attaches them to the GitHub release as vectorscan4j-natives.zip.
+// ./gradlew downloadNatives fetches them from the latest release (or -PnativesTag=vX.Y.Z, which also
+// works for draft releases); it needs the GitHub CLI, logged in.
+def nativePlatforms = [linux: ['x86_64', 'aarch64'], osx: ['aarch64']]
+def nativeLibs = ['hs', 'buffered_match_handler']
+def nativesArchive = layout.buildDirectory.file('natives/vectorscan4j-natives.zip').get().asFile
+
+tasks.register('fetchNativesArchive', Exec) {
+    def tag = project.findProperty('nativesTag')
+    outputs.file(nativesArchive)
+    outputs.upToDateWhen { false }
+    doFirst { nativesArchive.parentFile.mkdirs() }
+    commandLine(['gh', 'release', 'download'] + (tag ? [tag] : []) + [
+            '--repo', 'dynatrace-oss/vectorscan4j', '--pattern', nativesArchive.name,
+            '--dir', nativesArchive.parent, '--clobber'])
+}
+
+tasks.register('downloadNatives', Copy) {
+    group = 'native'
+    description = 'Downloads the bundled native libraries from a GitHub release (latest, or -PnativesTag=vX.Y.Z).'
+    dependsOn 'fetchNativesArchive'
+    from(zipTree(nativesArchive))
+    into(nativeSrcDir)
+}
+
+// Maven Central versions cannot be replaced, so never publish a jar that lacks a platform's libraries.
+tasks.register('verifyNatives') {
+    group = 'native'
+    description = 'Fails if any bundled native library is missing from src/main/resources/native.'
+    def expected = nativePlatforms.collectMany { os, arches ->
+        arches.collectMany { arch ->
+            nativeLibs.collect { lib -> new File(nativeSrcDir, "${os}/${arch}/lib${lib}.${os == 'osx' ? 'dylib' : 'so'}") }
+        }
+    }
+    doLast {
+        def missing = expected.findAll { !it.isFile() }
+        if (missing) {
+            throw new GradleException("Missing native libraries:\n  ${missing.join('\n  ')}\n" +
+                    'Run ./gradlew downloadNatives, or build them with the natives workflow.')
+        }
+    }
+}
+
+tasks.withType(PublishToMavenRepository).configureEach { dependsOn 'verifyNatives' }
+
+// buildBufferedMatchHandler and downloadNatives write into src/main/resources, which these tasks consume
+// as input. Order them when both are scheduled; deliberately not dependsOn, so a normal build does not
+// trigger a native rebuild or download.
 ['processResources', 'sourcesJar'].each { consumer ->
-    tasks.named(consumer).configure { mustRunAfter 'buildBufferedMatchHandler' }
+    tasks.named(consumer).configure { mustRunAfter 'buildBufferedMatchHandler', 'downloadNatives', 'verifyNatives' }
 }
 
 // The native callback libraries used by NativeMatchHandlerTests are no longer built as a Gradle
